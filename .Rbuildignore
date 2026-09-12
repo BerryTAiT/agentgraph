@@ -1,0 +1,11 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^README\.Rmd$
+^\.github$
+^tests/cpp$
+^\.trae-cn$
+^build_log\.txt$
+^src/.*\.o$
+^src/.*\.dll$
+^subscription-agent$

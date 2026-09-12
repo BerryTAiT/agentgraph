@@ -1,0 +1,11 @@
+CXX_STD = CXX20
+PKG_CXXFLAGS = -I../inst/include -I../inst/include/concurrentqueue
+
+SOURCES = RcppExports.cpp rcpp_exports.cpp type_converters.cpp \
+          llm/http_client.cpp llm/sse_parser.cpp llm/llm_client.cpp \
+          graph/node_runner.cpp graph/executor.cpp \
+          tools/builtin/builtin_tools.cpp tools/rpc_tool_client.cpp
+
+OBJECTS = $(SOURCES:.cpp=.o)
+
+PKG_LIBS = -lwinhttp -lws2_32

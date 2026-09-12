@@ -1,0 +1,27 @@
+Package: agentgraph
+Title: Graph-Based Agentic AI Framework for R
+Version: 0.1.0
+Authors@R: person("Developer", email = "dev@example.com", role = c("aut", "cre"))
+Description: Build agentic AI applications using LLM APIs with a graph-based
+    orchestration engine written in C++. Define agents, tools, and workflows
+    in R while the C++ engine handles concurrent execution, state management,
+    tool calling, and streaming. Supports OpenAI-compatible APIs, Anthropic,
+    and local LLMs.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+SystemRequirements: C++20, libcurl
+Imports:
+    Rcpp (>= 1.0.12),
+    jsonlite,
+    processx
+Suggests:
+    testthat (>= 3.0.0),
+    httpuv,
+    bench,
+    mirai,
+    curl,
+    shiny
+LinkingTo: Rcpp
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.1.0

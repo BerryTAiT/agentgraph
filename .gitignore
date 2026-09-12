@@ -1,0 +1,27 @@
+# -- R / RStudio --
+.Rhistory
+.RData
+.Rproj.user/
+.Rproj
+
+# -- Secrets / local config --
+.Renviron
+
+# -- Compiled C++ artifacts --
+*.o
+*.so
+*.dll
+*.dylib
+
+# -- R package build/check output --
+*.tar.gz
+.Rcheck/
+
+# -- Local databases (user data) --
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# -- OS noise --
+.DS_Store
+Thumbs.db

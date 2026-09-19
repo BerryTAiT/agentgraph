@@ -29,6 +29,10 @@
 .DS_Store
 Thumbs.db
 
+# -- Local docs (not for public repo) --
+MEMORY.md
+test.md
+
 # -- Temp / scratch --
 .audit_test*.R
 .trae-html-share-packages/

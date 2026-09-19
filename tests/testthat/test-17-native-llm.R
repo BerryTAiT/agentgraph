@@ -55,6 +55,9 @@ test_that("parse_llm_response_cpp handles all shapes offline", {
 
 test_that("chat_native_cpp hits the mock and propagates errors", {
   chat <- agentgraph:::chat_native_cpp
+  prov <- function(key, model, base) {
+    list(name = "openai", api_key = key, model = model, base_url = base)
+  }
   msg1 <- list(list(role = "user", content = "hello"))
 
   m <- start_mock_llm(list(list(
@@ -63,7 +66,7 @@ test_that("chat_native_cpp hits the mock and propagates errors", {
   )))
   on.exit(stop_py_mock(m), add = TRUE)
   base <- paste0("http://127.0.0.1:", m$port)
-  r <- chat("test-key", "mock-gpt", base, msg1, "SYS")
+  r <- chat(prov("test-key", "mock-gpt", base), msg1, "SYS")
   expect_identical(r$content, "Hi from mock")
   expect_identical(r$finish_reason, "stop")
   expect_identical(r$model, "mock-gpt")
@@ -73,7 +76,7 @@ test_that("chat_native_cpp hits the mock and propagates errors", {
 
   m <- start_mock_llm(list(list(content = "hi")))
   base <- paste0("http://127.0.0.1:", m$port)
-  invisible(chat("k", "mm", base, msg1, "SYS"))
+  invisible(chat(prov("k", "mm", base), msg1, "SYS"))
   Sys.sleep(0.3)
   log1 <- paste(readLines(m$log, warn = FALSE), collapse = "\n")
   expect_true(grepl('"role":"system"', log1, fixed = TRUE))
@@ -88,7 +91,7 @@ test_that("chat_native_cpp hits the mock and propagates errors", {
     model = "mock-gpt"
   )))
   base <- paste0("http://127.0.0.1:", m$port)
-  r <- chat("k", "mock-gpt", base, msg1, "")
+  r <- chat(prov("k", "mock-gpt", base), msg1, "")
   expect_identical(r$finish_reason, "tool_calls")
   expect_identical(r$tool_calls[[1]]$name, "calculator")
   expect_identical(
@@ -99,16 +102,19 @@ test_that("chat_native_cpp hits the mock and propagates errors", {
 
   m <- start_mock_llm(list(list(status = 500, content = "x")))
   base <- paste0("http://127.0.0.1:", m$port)
-  e <- err_msg(chat("k", "mm", base, msg1, ""))
+  e <- err_msg(chat(prov("k", "mm", base), msg1, ""))
   expect_true(grepl("API error (500)", e, fixed = TRUE))
   stop_py_mock(m)
 
-  e <- err_msg(chat("k", "mm", "http://127.0.0.1:1", msg1, ""))
+  e <- err_msg(chat(prov("k", "mm", "http://127.0.0.1:1"), msg1, ""))
   expect_true(!is.null(e) && grepl("failed", e, fixed = TRUE))
 })
 
 test_that("chat_parallel_cpp fans out and reports per-call errors", {
   par <- agentgraph:::chat_parallel_cpp
+  prov <- function(key, model, base) {
+    list(name = "openai", api_key = key, model = model, base_url = base)
+  }
   msgs <- list(
     list(list(role = "user", content = "q1")),
     list(list(role = "user", content = "q2")),
@@ -118,7 +124,7 @@ test_that("chat_parallel_cpp fans out and reports per-call errors", {
   m <- start_mock_llm(list(list(content = "parallel-ok")))
   on.exit(stop_py_mock(m), add = TRUE)
   base <- paste0("http://127.0.0.1:", m$port)
-  out <- par("k", "mm", base, msgs, "", 4)
+  out <- par(prov("k", "mm", base), msgs, "", 4)
   expect_length(out, 3L)
   expect_identical(out[[1]]$content, "parallel-ok")
   expect_identical(out[[2]]$content, "parallel-ok")
@@ -132,7 +138,7 @@ test_that("chat_parallel_cpp fans out and reports per-call errors", {
 
   m <- start_mock_llm(list(list(content = "seq-ok")))
   base <- paste0("http://127.0.0.1:", m$port)
-  out <- par("k", "mm", base, msgs, "", 0)
+  out <- par(prov("k", "mm", base), msgs, "", 0)
   expect_length(out, 3L)
   expect_identical(out[[1]]$content, "seq-ok")
   expect_identical(out[[3]]$content, "seq-ok")
@@ -140,13 +146,13 @@ test_that("chat_parallel_cpp fans out and reports per-call errors", {
 
   m <- start_mock_llm(list(list(status = 500, content = "x")))
   base <- paste0("http://127.0.0.1:", m$port)
-  out <- par("k", "mm", base, msgs, "", 4)
+  out <- par(prov("k", "mm", base), msgs, "", 4)
   expect_length(out, 3L)
   expect_true(grepl("API error (500)", out[[1]]$error, fixed = TRUE))
   expect_true(grepl("API error (500)", out[[2]]$error, fixed = TRUE))
   expect_true(grepl("API error (500)", out[[3]]$error, fixed = TRUE))
   stop_py_mock(m)
 
-  out <- par("k", "mm", "http://127.0.0.1:1", list(), "", 4)
+  out <- par(prov("k", "mm", "http://127.0.0.1:1"), list(), "", 4)
   expect_length(out, 0L)
 })

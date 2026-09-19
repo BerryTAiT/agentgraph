@@ -6,6 +6,9 @@
 
 # -- Secrets / local config --
 .Renviron
+.env
+.env.local
+*.env
 
 # -- Compiled C++ artifacts --
 *.o
@@ -25,3 +28,12 @@
 # -- OS noise --
 .DS_Store
 Thumbs.db
+
+# -- Temp / scratch --
+.audit_test*.R
+.trae-html-share-packages/
+__pycache__/
+*.pyc
+
+/.quarto/
+**/*.quarto_ipynb

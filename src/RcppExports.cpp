@@ -32,33 +32,29 @@ BEGIN_RCPP
 END_RCPP
 }
 // chat_native_cpp
-Rcpp::List chat_native_cpp(std::string api_key, std::string model, std::string base_url, Rcpp::List messages_r, std::string system_prompt);
-RcppExport SEXP _agentgraph_chat_native_cpp(SEXP api_keySEXP, SEXP modelSEXP, SEXP base_urlSEXP, SEXP messages_rSEXP, SEXP system_promptSEXP) {
+Rcpp::List chat_native_cpp(Rcpp::List provider, Rcpp::List messages_r, std::string system_prompt);
+RcppExport SEXP _agentgraph_chat_native_cpp(SEXP providerSEXP, SEXP messages_rSEXP, SEXP system_promptSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type api_key(api_keySEXP);
-    Rcpp::traits::input_parameter< std::string >::type model(modelSEXP);
-    Rcpp::traits::input_parameter< std::string >::type base_url(base_urlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type provider(providerSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type messages_r(messages_rSEXP);
     Rcpp::traits::input_parameter< std::string >::type system_prompt(system_promptSEXP);
-    rcpp_result_gen = Rcpp::wrap(chat_native_cpp(api_key, model, base_url, messages_r, system_prompt));
+    rcpp_result_gen = Rcpp::wrap(chat_native_cpp(provider, messages_r, system_prompt));
     return rcpp_result_gen;
 END_RCPP
 }
 // chat_parallel_cpp
-Rcpp::List chat_parallel_cpp(std::string api_key, std::string model, std::string base_url, Rcpp::List messages_list, std::string system_prompt, int n_threads);
-RcppExport SEXP _agentgraph_chat_parallel_cpp(SEXP api_keySEXP, SEXP modelSEXP, SEXP base_urlSEXP, SEXP messages_listSEXP, SEXP system_promptSEXP, SEXP n_threadsSEXP) {
+Rcpp::List chat_parallel_cpp(Rcpp::List provider, Rcpp::List messages_list, std::string system_prompt, int n_threads);
+RcppExport SEXP _agentgraph_chat_parallel_cpp(SEXP providerSEXP, SEXP messages_listSEXP, SEXP system_promptSEXP, SEXP n_threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type api_key(api_keySEXP);
-    Rcpp::traits::input_parameter< std::string >::type model(modelSEXP);
-    Rcpp::traits::input_parameter< std::string >::type base_url(base_urlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type provider(providerSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type messages_list(messages_listSEXP);
     Rcpp::traits::input_parameter< std::string >::type system_prompt(system_promptSEXP);
     Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(chat_parallel_cpp(api_key, model, base_url, messages_list, system_prompt, n_threads));
+    rcpp_result_gen = Rcpp::wrap(chat_parallel_cpp(provider, messages_list, system_prompt, n_threads));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -74,8 +70,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // run_graph_cpp
-Rcpp::List run_graph_cpp(Rcpp::List graph_config, Rcpp::List state_data, Rcpp::List messages_r, Rcpp::List tools_r, int n_threads, Rcpp::Nullable<Rcpp::Function> on_token, std::string resume_from, int tool_server_port);
-RcppExport SEXP _agentgraph_run_graph_cpp(SEXP graph_configSEXP, SEXP state_dataSEXP, SEXP messages_rSEXP, SEXP tools_rSEXP, SEXP n_threadsSEXP, SEXP on_tokenSEXP, SEXP resume_fromSEXP, SEXP tool_server_portSEXP) {
+Rcpp::List run_graph_cpp(Rcpp::List graph_config, Rcpp::List state_data, Rcpp::List messages_r, Rcpp::List tools_r, int n_threads, Rcpp::Nullable<Rcpp::Function> on_token, std::string resume_from, int tool_server_port, std::string tool_server_token, Rcpp::Nullable<Rcpp::Function> on_event, std::string checkpoint_path, std::string log_path, int max_total_tokens, double max_time_sec, double max_cost_usd);
+RcppExport SEXP _agentgraph_run_graph_cpp(SEXP graph_configSEXP, SEXP state_dataSEXP, SEXP messages_rSEXP, SEXP tools_rSEXP, SEXP n_threadsSEXP, SEXP on_tokenSEXP, SEXP resume_fromSEXP, SEXP tool_server_portSEXP, SEXP tool_server_tokenSEXP, SEXP on_eventSEXP, SEXP checkpoint_pathSEXP, SEXP log_pathSEXP, SEXP max_total_tokensSEXP, SEXP max_time_secSEXP, SEXP max_cost_usdSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -87,7 +83,74 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::Function> >::type on_token(on_tokenSEXP);
     Rcpp::traits::input_parameter< std::string >::type resume_from(resume_fromSEXP);
     Rcpp::traits::input_parameter< int >::type tool_server_port(tool_server_portSEXP);
-    rcpp_result_gen = Rcpp::wrap(run_graph_cpp(graph_config, state_data, messages_r, tools_r, n_threads, on_token, resume_from, tool_server_port));
+    Rcpp::traits::input_parameter< std::string >::type tool_server_token(tool_server_tokenSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::Function> >::type on_event(on_eventSEXP);
+    Rcpp::traits::input_parameter< std::string >::type checkpoint_path(checkpoint_pathSEXP);
+    Rcpp::traits::input_parameter< std::string >::type log_path(log_pathSEXP);
+    Rcpp::traits::input_parameter< int >::type max_total_tokens(max_total_tokensSEXP);
+    Rcpp::traits::input_parameter< double >::type max_time_sec(max_time_secSEXP);
+    Rcpp::traits::input_parameter< double >::type max_cost_usd(max_cost_usdSEXP);
+    rcpp_result_gen = Rcpp::wrap(run_graph_cpp(graph_config, state_data, messages_r, tools_r, n_threads, on_token, resume_from, tool_server_port, tool_server_token, on_event, checkpoint_path, log_path, max_total_tokens, max_time_sec, max_cost_usd));
+    return rcpp_result_gen;
+END_RCPP
+}
+// checkpoint_load_cpp
+Rcpp::List checkpoint_load_cpp(std::string checkpoint_path);
+RcppExport SEXP _agentgraph_checkpoint_load_cpp(SEXP checkpoint_pathSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type checkpoint_path(checkpoint_pathSEXP);
+    rcpp_result_gen = Rcpp::wrap(checkpoint_load_cpp(checkpoint_path));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cache_clear_cpp
+void cache_clear_cpp(std::string ns);
+RcppExport SEXP _agentgraph_cache_clear_cpp(SEXP nsSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type ns(nsSEXP);
+    cache_clear_cpp(ns);
+    return R_NilValue;
+END_RCPP
+}
+// cache_stats_cpp
+Rcpp::DataFrame cache_stats_cpp();
+RcppExport SEXP _agentgraph_cache_stats_cpp() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(cache_stats_cpp());
+    return rcpp_result_gen;
+END_RCPP
+}
+// usage_reset_cpp
+void usage_reset_cpp();
+RcppExport SEXP _agentgraph_usage_reset_cpp() {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    usage_reset_cpp();
+    return R_NilValue;
+END_RCPP
+}
+// usage_stats_cpp
+Rcpp::List usage_stats_cpp();
+RcppExport SEXP _agentgraph_usage_stats_cpp() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(usage_stats_cpp());
+    return rcpp_result_gen;
+END_RCPP
+}
+// cache_hit_stats_cpp
+Rcpp::List cache_hit_stats_cpp();
+RcppExport SEXP _agentgraph_cache_hit_stats_cpp() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(cache_hit_stats_cpp());
     return rcpp_result_gen;
 END_RCPP
 }
@@ -104,21 +167,22 @@ BEGIN_RCPP
 END_RCPP
 }
 // rpc_call_cpp
-Rcpp::List rpc_call_cpp(int port, std::string tool_name, std::string args_json);
-RcppExport SEXP _agentgraph_rpc_call_cpp(SEXP portSEXP, SEXP tool_nameSEXP, SEXP args_jsonSEXP) {
+Rcpp::List rpc_call_cpp(int port, std::string tool_name, std::string args_json, std::string token);
+RcppExport SEXP _agentgraph_rpc_call_cpp(SEXP portSEXP, SEXP tool_nameSEXP, SEXP args_jsonSEXP, SEXP tokenSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< int >::type port(portSEXP);
     Rcpp::traits::input_parameter< std::string >::type tool_name(tool_nameSEXP);
     Rcpp::traits::input_parameter< std::string >::type args_json(args_jsonSEXP);
-    rcpp_result_gen = Rcpp::wrap(rpc_call_cpp(port, tool_name, args_json));
+    Rcpp::traits::input_parameter< std::string >::type token(tokenSEXP);
+    rcpp_result_gen = Rcpp::wrap(rpc_call_cpp(port, tool_name, args_json, token));
     return rcpp_result_gen;
 END_RCPP
 }
 // rpc_stress_cpp
-Rcpp::List rpc_stress_cpp(int port, std::string tool_name, std::string args_json, int n_calls, int n_threads);
-RcppExport SEXP _agentgraph_rpc_stress_cpp(SEXP portSEXP, SEXP tool_nameSEXP, SEXP args_jsonSEXP, SEXP n_callsSEXP, SEXP n_threadsSEXP) {
+Rcpp::List rpc_stress_cpp(int port, std::string tool_name, std::string args_json, int n_calls, int n_threads, std::string token);
+RcppExport SEXP _agentgraph_rpc_stress_cpp(SEXP portSEXP, SEXP tool_nameSEXP, SEXP args_jsonSEXP, SEXP n_callsSEXP, SEXP n_threadsSEXP, SEXP tokenSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -127,21 +191,151 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type args_json(args_jsonSEXP);
     Rcpp::traits::input_parameter< int >::type n_calls(n_callsSEXP);
     Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(rpc_stress_cpp(port, tool_name, args_json, n_calls, n_threads));
+    Rcpp::traits::input_parameter< std::string >::type token(tokenSEXP);
+    rcpp_result_gen = Rcpp::wrap(rpc_stress_cpp(port, tool_name, args_json, n_calls, n_threads, token));
     return rcpp_result_gen;
+END_RCPP
+}
+// embed_cpp
+Rcpp::NumericVector embed_cpp(Rcpp::List provider, std::string text);
+RcppExport SEXP _agentgraph_embed_cpp(SEXP providerSEXP, SEXP textSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type provider(providerSEXP);
+    Rcpp::traits::input_parameter< std::string >::type text(textSEXP);
+    rcpp_result_gen = Rcpp::wrap(embed_cpp(provider, text));
+    return rcpp_result_gen;
+END_RCPP
+}
+// embed_batch_cpp
+Rcpp::List embed_batch_cpp(Rcpp::List provider, Rcpp::CharacterVector texts);
+RcppExport SEXP _agentgraph_embed_batch_cpp(SEXP providerSEXP, SEXP textsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type provider(providerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::CharacterVector >::type texts(textsSEXP);
+    rcpp_result_gen = Rcpp::wrap(embed_batch_cpp(provider, texts));
+    return rcpp_result_gen;
+END_RCPP
+}
+// create_vector_store_cpp
+SEXP create_vector_store_cpp(Rcpp::List config);
+RcppExport SEXP _agentgraph_create_vector_store_cpp(SEXP configSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type config(configSEXP);
+    rcpp_result_gen = Rcpp::wrap(create_vector_store_cpp(config));
+    return rcpp_result_gen;
+END_RCPP
+}
+// vector_store_add_cpp
+void vector_store_add_cpp(SEXP store, std::string id, Rcpp::NumericVector vec, std::string metadata_json);
+RcppExport SEXP _agentgraph_vector_store_add_cpp(SEXP storeSEXP, SEXP idSEXP, SEXP vecSEXP, SEXP metadata_jsonSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type store(storeSEXP);
+    Rcpp::traits::input_parameter< std::string >::type id(idSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type vec(vecSEXP);
+    Rcpp::traits::input_parameter< std::string >::type metadata_json(metadata_jsonSEXP);
+    vector_store_add_cpp(store, id, vec, metadata_json);
+    return R_NilValue;
+END_RCPP
+}
+// vector_store_search_cpp
+Rcpp::List vector_store_search_cpp(SEXP store, Rcpp::NumericVector query, int k);
+RcppExport SEXP _agentgraph_vector_store_search_cpp(SEXP storeSEXP, SEXP querySEXP, SEXP kSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type store(storeSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type query(querySEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    rcpp_result_gen = Rcpp::wrap(vector_store_search_cpp(store, query, k));
+    return rcpp_result_gen;
+END_RCPP
+}
+// vector_store_remove_cpp
+void vector_store_remove_cpp(SEXP store, std::string id);
+RcppExport SEXP _agentgraph_vector_store_remove_cpp(SEXP storeSEXP, SEXP idSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type store(storeSEXP);
+    Rcpp::traits::input_parameter< std::string >::type id(idSEXP);
+    vector_store_remove_cpp(store, id);
+    return R_NilValue;
+END_RCPP
+}
+// vector_store_clear_cpp
+void vector_store_clear_cpp(SEXP store);
+RcppExport SEXP _agentgraph_vector_store_clear_cpp(SEXP storeSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type store(storeSEXP);
+    vector_store_clear_cpp(store);
+    return R_NilValue;
+END_RCPP
+}
+// vector_store_count_cpp
+int vector_store_count_cpp(SEXP store);
+RcppExport SEXP _agentgraph_vector_store_count_cpp(SEXP storeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type store(storeSEXP);
+    rcpp_result_gen = Rcpp::wrap(vector_store_count_cpp(store));
+    return rcpp_result_gen;
+END_RCPP
+}
+// vector_store_save_cpp
+void vector_store_save_cpp(SEXP store);
+RcppExport SEXP _agentgraph_vector_store_save_cpp(SEXP storeSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type store(storeSEXP);
+    vector_store_save_cpp(store);
+    return R_NilValue;
+END_RCPP
+}
+// vector_store_load_cpp
+void vector_store_load_cpp(SEXP store);
+RcppExport SEXP _agentgraph_vector_store_load_cpp(SEXP storeSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type store(storeSEXP);
+    vector_store_load_cpp(store);
+    return R_NilValue;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
     {"_agentgraph_hello_cpp", (DL_FUNC) &_agentgraph_hello_cpp, 0},
     {"_agentgraph_http_get_cpp", (DL_FUNC) &_agentgraph_http_get_cpp, 1},
-    {"_agentgraph_chat_native_cpp", (DL_FUNC) &_agentgraph_chat_native_cpp, 5},
-    {"_agentgraph_chat_parallel_cpp", (DL_FUNC) &_agentgraph_chat_parallel_cpp, 6},
+    {"_agentgraph_chat_native_cpp", (DL_FUNC) &_agentgraph_chat_native_cpp, 3},
+    {"_agentgraph_chat_parallel_cpp", (DL_FUNC) &_agentgraph_chat_parallel_cpp, 4},
     {"_agentgraph_parse_llm_response_cpp", (DL_FUNC) &_agentgraph_parse_llm_response_cpp, 1},
-    {"_agentgraph_run_graph_cpp", (DL_FUNC) &_agentgraph_run_graph_cpp, 8},
+    {"_agentgraph_run_graph_cpp", (DL_FUNC) &_agentgraph_run_graph_cpp, 15},
+    {"_agentgraph_checkpoint_load_cpp", (DL_FUNC) &_agentgraph_checkpoint_load_cpp, 1},
+    {"_agentgraph_cache_clear_cpp", (DL_FUNC) &_agentgraph_cache_clear_cpp, 1},
+    {"_agentgraph_cache_stats_cpp", (DL_FUNC) &_agentgraph_cache_stats_cpp, 0},
+    {"_agentgraph_usage_reset_cpp", (DL_FUNC) &_agentgraph_usage_reset_cpp, 0},
+    {"_agentgraph_usage_stats_cpp", (DL_FUNC) &_agentgraph_usage_stats_cpp, 0},
+    {"_agentgraph_cache_hit_stats_cpp", (DL_FUNC) &_agentgraph_cache_hit_stats_cpp, 0},
     {"_agentgraph_test_tool_cpp", (DL_FUNC) &_agentgraph_test_tool_cpp, 2},
-    {"_agentgraph_rpc_call_cpp", (DL_FUNC) &_agentgraph_rpc_call_cpp, 3},
-    {"_agentgraph_rpc_stress_cpp", (DL_FUNC) &_agentgraph_rpc_stress_cpp, 5},
+    {"_agentgraph_rpc_call_cpp", (DL_FUNC) &_agentgraph_rpc_call_cpp, 4},
+    {"_agentgraph_rpc_stress_cpp", (DL_FUNC) &_agentgraph_rpc_stress_cpp, 6},
+    {"_agentgraph_embed_cpp", (DL_FUNC) &_agentgraph_embed_cpp, 2},
+    {"_agentgraph_embed_batch_cpp", (DL_FUNC) &_agentgraph_embed_batch_cpp, 2},
+    {"_agentgraph_create_vector_store_cpp", (DL_FUNC) &_agentgraph_create_vector_store_cpp, 1},
+    {"_agentgraph_vector_store_add_cpp", (DL_FUNC) &_agentgraph_vector_store_add_cpp, 4},
+    {"_agentgraph_vector_store_search_cpp", (DL_FUNC) &_agentgraph_vector_store_search_cpp, 3},
+    {"_agentgraph_vector_store_remove_cpp", (DL_FUNC) &_agentgraph_vector_store_remove_cpp, 2},
+    {"_agentgraph_vector_store_clear_cpp", (DL_FUNC) &_agentgraph_vector_store_clear_cpp, 1},
+    {"_agentgraph_vector_store_count_cpp", (DL_FUNC) &_agentgraph_vector_store_count_cpp, 1},
+    {"_agentgraph_vector_store_save_cpp", (DL_FUNC) &_agentgraph_vector_store_save_cpp, 1},
+    {"_agentgraph_vector_store_load_cpp", (DL_FUNC) &_agentgraph_vector_store_load_cpp, 1},
     {NULL, NULL, 0}
 };
 

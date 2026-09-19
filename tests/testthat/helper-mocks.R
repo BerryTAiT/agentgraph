@@ -80,6 +80,18 @@ start_stream_mock <- function(tokens) {
   launch_py_mock("stream_mock.py", tf, tmp)
 }
 
+# Start the voice mock (STT transcriptions + TTS synthesis).
+start_voice_mock <- function() {
+  tmp <- tempfile("mock"); dir.create(tmp)
+  launch_py_mock("voice_mock.py", character(0), tmp)
+}
+
+# Start the fine-tuning mock (files + fine_tuning/jobs endpoints).
+start_fine_tune_mock <- function() {
+  tmp <- tempfile("mock"); dir.create(tmp)
+  launch_py_mock("fine_tune_mock.py", character(0), tmp)
+}
+
 # Build an OpenAI-compatible provider pointed at a running mock.
 mock_provider <- function(m, model = "mock-model") {
   agentgraph::provider_openai(

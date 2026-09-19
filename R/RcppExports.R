@@ -9,31 +9,95 @@ http_get_cpp <- function(url) {
     .Call(`_agentgraph_http_get_cpp`, url)
 }
 
-chat_native_cpp <- function(api_key, model, base_url, messages_r, system_prompt) {
-    .Call(`_agentgraph_chat_native_cpp`, api_key, model, base_url, messages_r, system_prompt)
+chat_native_cpp <- function(provider, messages_r, system_prompt) {
+    .Call(`_agentgraph_chat_native_cpp`, provider, messages_r, system_prompt)
 }
 
-chat_parallel_cpp <- function(api_key, model, base_url, messages_list, system_prompt, n_threads) {
-    .Call(`_agentgraph_chat_parallel_cpp`, api_key, model, base_url, messages_list, system_prompt, n_threads)
+chat_parallel_cpp <- function(provider, messages_list, system_prompt, n_threads) {
+    .Call(`_agentgraph_chat_parallel_cpp`, provider, messages_list, system_prompt, n_threads)
 }
 
 parse_llm_response_cpp <- function(response_json) {
     .Call(`_agentgraph_parse_llm_response_cpp`, response_json)
 }
 
-run_graph_cpp <- function(graph_config, state_data, messages_r, tools_r, n_threads = 0L, on_token = NULL, resume_from = "", tool_server_port = 0L) {
-    .Call(`_agentgraph_run_graph_cpp`, graph_config, state_data, messages_r, tools_r, n_threads, on_token, resume_from, tool_server_port)
+run_graph_cpp <- function(graph_config, state_data, messages_r, tools_r, n_threads = 0L, on_token = NULL, resume_from = "", tool_server_port = 0L, tool_server_token = "", on_event = NULL, checkpoint_path = "", log_path = "", max_total_tokens = 0L, max_time_sec = 0.0, max_cost_usd = 0.0) {
+    .Call(`_agentgraph_run_graph_cpp`, graph_config, state_data, messages_r, tools_r, n_threads, on_token, resume_from, tool_server_port, tool_server_token, on_event, checkpoint_path, log_path, max_total_tokens, max_time_sec, max_cost_usd)
+}
+
+checkpoint_load_cpp <- function(checkpoint_path) {
+    .Call(`_agentgraph_checkpoint_load_cpp`, checkpoint_path)
+}
+
+cache_clear_cpp <- function(ns = "") {
+    invisible(.Call(`_agentgraph_cache_clear_cpp`, ns))
+}
+
+cache_stats_cpp <- function() {
+    .Call(`_agentgraph_cache_stats_cpp`)
+}
+
+usage_reset_cpp <- function() {
+    invisible(.Call(`_agentgraph_usage_reset_cpp`))
+}
+
+usage_stats_cpp <- function() {
+    .Call(`_agentgraph_usage_stats_cpp`)
+}
+
+cache_hit_stats_cpp <- function() {
+    .Call(`_agentgraph_cache_hit_stats_cpp`)
 }
 
 test_tool_cpp <- function(tool_name, args_json) {
     .Call(`_agentgraph_test_tool_cpp`, tool_name, args_json)
 }
 
-rpc_call_cpp <- function(port, tool_name, args_json) {
-    .Call(`_agentgraph_rpc_call_cpp`, port, tool_name, args_json)
+rpc_call_cpp <- function(port, tool_name, args_json, token = "") {
+    .Call(`_agentgraph_rpc_call_cpp`, port, tool_name, args_json, token)
 }
 
-rpc_stress_cpp <- function(port, tool_name, args_json, n_calls = 8L, n_threads = 4L) {
-    .Call(`_agentgraph_rpc_stress_cpp`, port, tool_name, args_json, n_calls, n_threads)
+rpc_stress_cpp <- function(port, tool_name, args_json, n_calls = 8L, n_threads = 4L, token = "") {
+    .Call(`_agentgraph_rpc_stress_cpp`, port, tool_name, args_json, n_calls, n_threads, token)
+}
+
+embed_cpp <- function(provider, text) {
+    .Call(`_agentgraph_embed_cpp`, provider, text)
+}
+
+embed_batch_cpp <- function(provider, texts) {
+    .Call(`_agentgraph_embed_batch_cpp`, provider, texts)
+}
+
+create_vector_store_cpp <- function(config) {
+    .Call(`_agentgraph_create_vector_store_cpp`, config)
+}
+
+vector_store_add_cpp <- function(store, id, vec, metadata_json = "{}") {
+    invisible(.Call(`_agentgraph_vector_store_add_cpp`, store, id, vec, metadata_json))
+}
+
+vector_store_search_cpp <- function(store, query, k = 5L) {
+    .Call(`_agentgraph_vector_store_search_cpp`, store, query, k)
+}
+
+vector_store_remove_cpp <- function(store, id) {
+    invisible(.Call(`_agentgraph_vector_store_remove_cpp`, store, id))
+}
+
+vector_store_clear_cpp <- function(store) {
+    invisible(.Call(`_agentgraph_vector_store_clear_cpp`, store))
+}
+
+vector_store_count_cpp <- function(store) {
+    .Call(`_agentgraph_vector_store_count_cpp`, store)
+}
+
+vector_store_save_cpp <- function(store) {
+    invisible(.Call(`_agentgraph_vector_store_save_cpp`, store))
+}
+
+vector_store_load_cpp <- function(store) {
+    invisible(.Call(`_agentgraph_vector_store_load_cpp`, store))
 }
 

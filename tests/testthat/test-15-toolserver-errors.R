@@ -9,23 +9,33 @@ test_that("tool server propagates handler errors and dead-server failures", {
   srv <- agentgraph:::.start_tool_server(list(good, boom, badjson))
   on.exit(agentgraph:::.stop_tool_server(srv), add = TRUE)
   port <- srv$port
+  token <- srv$token
+  expect_true(is.character(token) && nzchar(token))
 
-  r_good <- agentgraph:::rpc_call_cpp(port, "good", '{"x":21}')
+  r_good <- agentgraph:::rpc_call_cpp(port, "good", '{"x":21}', token)
   expect_true(r_good$ok)
   expect_equal(
     as.numeric(jsonlite::fromJSON(r_good$result, simplifyVector = FALSE)$result),
     42
   )
 
-  r_boom <- agentgraph:::rpc_call_cpp(port, "boom", "{}")
+  # Requests without the token (or with the wrong one) are rejected.
+  r_notoken <- agentgraph:::rpc_call_cpp(port, "good", '{"x":21}')
+  expect_false(r_notoken$ok)
+  expect_true(grepl("unauthorized", r_notoken$error, fixed = TRUE))
+  r_badtoken <- agentgraph:::rpc_call_cpp(port, "good", '{"x":21}', "wrong")
+  expect_false(r_badtoken$ok)
+  expect_true(grepl("unauthorized", r_badtoken$error, fixed = TRUE))
+
+  r_boom <- agentgraph:::rpc_call_cpp(port, "boom", "{}", token)
   expect_false(r_boom$ok)
   expect_identical(r_boom$error, "boom")
 
-  r_badjson <- agentgraph:::rpc_call_cpp(port, "badjson", "{}")
+  r_badjson <- agentgraph:::rpc_call_cpp(port, "badjson", "{}", token)
   expect_false(r_badjson$ok)
   expect_true(grepl("tool handler returned invalid JSON", r_badjson$error, fixed = TRUE))
 
-  r_unknown <- agentgraph:::rpc_call_cpp(port, "nope", "{}")
+  r_unknown <- agentgraph:::rpc_call_cpp(port, "nope", "{}", token)
   expect_false(r_unknown$ok)
   expect_true(grepl("Tool not found", r_unknown$error, fixed = TRUE))
 
@@ -33,7 +43,7 @@ test_that("tool server propagates handler errors and dead-server failures", {
   agentgraph:::.stop_tool_server(srv)
   srv <- NULL
   Sys.sleep(0.5)
-  r_dead <- agentgraph:::rpc_call_cpp(dead_port, "good", "{}")
+  r_dead <- agentgraph:::rpc_call_cpp(dead_port, "good", "{}", token)
   expect_false(r_dead$ok)
   expect_true(grepl("cannot connect", r_dead$error, fixed = TRUE))
 })

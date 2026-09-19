@@ -28,7 +28,7 @@ Result<void> Executor::run_parallel_node(const Graph& graph, const NodeConfig& n
     pool_->detach_sequence(0, n, [&](int i) {
         const std::string& sub_id = node.sub_node_ids[i];
         const NodeConfig& sub_node = graph.get_node(sub_id);
-        NodeRunner runner(tools_);  // no token/event callbacks from worker threads
+        NodeRunner runner(tools_, nullptr, nullptr, usage_);  // no token/event callbacks from worker threads
         auto r = runner.run_node(sub_node, state);
         if (r.is_err()) {
             errors[i] = r.error().message;
@@ -84,8 +84,9 @@ Result<void> Executor::run_subgraph_node(const NodeConfig& node, GraphState& sta
     }
 
     // A subgraph gets its own thread pool to avoid nested-pool deadlock when the
-    // parent is already running a parallel section.
-    Executor sub(tools_, n_threads_, on_token_, on_event_);
+    // parent is already running a parallel section. It shares the parent's
+    // budget + usage tracker so token limits accumulate across the whole run.
+    Executor sub(tools_, n_threads_, on_token_, on_event_, on_checkpoint_, budget_, usage_);
     auto result = sub.run_impl(subgraph, state, inner_resume);
     if (result.is_err()) return result;
 
@@ -114,11 +115,49 @@ Result<void> Executor::run_subgraph_node(const NodeConfig& node, GraphState& sta
 }
 
 Result<void> Executor::run_impl(const Graph& graph, GraphState& state, const std::string& resume_from) {
-    NodeRunner runner(tools_, on_token_, on_event_);
+    NodeRunner runner(tools_, on_token_, on_event_, usage_);
 
     std::string current = resume_from.empty() ? graph.entry_point() : resume_from;
     int iterations = 0;
     int max_iter = graph.config().max_iterations;
+    auto start = std::chrono::steady_clock::now();
+
+    // Abort the run once a budget limit is exceeded. Token usage accumulates
+    // in the shared UsageTracker across the whole run (incl. parallel/subgraph
+    // nodes); wall-clock time is measured from the start of this run_impl.
+    auto check_budget = [&]() -> Result<void> {
+        if (budget_.max_total_tokens > 0 && usage_ &&
+            usage_->total_tokens.load() > budget_.max_total_tokens) {
+            return Result<void>::err(
+                "Budget exceeded: max_total_tokens (" +
+                std::to_string(budget_.max_total_tokens) + ")");
+        }
+        if (budget_.max_time_sec > 0) {
+            double elapsed = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - start).count();
+            if (elapsed > budget_.max_time_sec) {
+                return Result<void>::err(
+                    "Budget exceeded: max_time_sec (" +
+                    std::to_string(budget_.max_time_sec) + "s)");
+            }
+        }
+        if (budget_.max_cost_usd > 0 && usage_ &&
+            usage_->cost_usd.load() > budget_.max_cost_usd) {
+            return Result<void>::err(
+                "Budget exceeded: max_cost_usd (" +
+                std::to_string(budget_.max_cost_usd) + ")");
+        }
+        return Result<void>::ok();
+    };
+
+    // Persist a crash-durable snapshot after each node completes. resume_node
+    // records where execution should continue from: the outgoing target of the
+    // just-finished node (or END_NODE when the graph is done), or the interrupt
+    // node's resume target when execution paused.
+    auto save_checkpoint = [&](const std::string& resume_node) {
+        if (on_checkpoint_) on_checkpoint_(state, resume_node);
+        if (on_event_) on_event_("checkpoint", json{{"resume_node", resume_node}});
+    };
 
     while (current != END_NODE && iterations < max_iter) {
         iterations++;
@@ -147,6 +186,7 @@ Result<void> Executor::run_impl(const Graph& graph, GraphState& state, const std
             if (on_event_) {
                 on_event_("interrupt", json{{"node_id", node.id}, {"resume_node", next}});
             }
+            save_checkpoint(next);
             return Result<void>::ok();
         } else {
             result = runner.run_node(node, state);
@@ -157,14 +197,27 @@ Result<void> Executor::run_impl(const Graph& graph, GraphState& state, const std
                 "Error in node '" + current + "': " + result.error().message);
         }
 
+        // Enforce the run-level budget after every node completes.
+        auto budget_check = check_budget();
+        if (budget_check.is_err()) {
+            return budget_check;
+        }
+
         // If execution was paused (an interrupt node fired directly, or a
         // subgraph paused on an inner interrupt), stop without advancing.
         if (is_interrupted(state)) {
+            std::string resume_node = current;
+            if (state.has(RESUME_NODE_KEY) && state.get(RESUME_NODE_KEY).is_string()) {
+                resume_node = state.get(RESUME_NODE_KEY).get<std::string>();
+            }
+            save_checkpoint(resume_node);
             return Result<void>::ok();
         }
 
         auto edges = graph.get_edges_from(current);
-        current = Router::resolve_next(edges, state);
+        std::string next = Router::resolve_next(edges, state);
+        save_checkpoint(next);
+        current = next;
     }
 
     if (iterations >= max_iter) {

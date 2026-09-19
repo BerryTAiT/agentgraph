@@ -10,7 +10,7 @@ Description: Build agentic AI applications using LLM APIs with a graph-based
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-SystemRequirements: C++20, libcurl
+SystemRequirements: C++20; libcurl (Linux/macOS; Windows uses built-in WinHTTP)
 Imports:
     Rcpp (>= 1.0.12),
     jsonlite,
@@ -21,6 +21,9 @@ Suggests:
     bench,
     mirai,
     curl,
+    DBI,
+    RSQLite,
+    pdftools,
     shiny
 LinkingTo: Rcpp
 Config/testthat/edition: 3

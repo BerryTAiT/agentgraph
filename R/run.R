@@ -1,131 +1,3 @@
-# Internal: convert a message list to the OpenAI chat-completions format
-.message_to_openai <- function(msg) {
-  out <- list(role = msg$role)
-
-  tool_calls <- msg$tool_calls
-  if (!is.null(tool_calls) && length(tool_calls) > 0) {
-    out$content <- if (is.null(msg$content) || nchar(msg$content) == 0) NULL else msg$content
-    out$tool_calls <- lapply(tool_calls, function(tc) {
-      list(
-        id = tc$id,
-        type = "function",
-        `function` = list(
-          name = tc$name,
-          arguments = if (is.character(tc$arguments)) tc$arguments
-                     else jsonlite::toJSON(tc$arguments, auto_unbox = TRUE)
-        )
-      )
-    })
-  } else if (!is.null(msg$tool_call_id) && nchar(msg$tool_call_id) > 0) {
-    out$content <- msg$content
-    out$tool_call_id <- msg$tool_call_id
-  } else {
-    out$content <- msg$content
-  }
-
-  out
-}
-
-# Internal: convert a tool schema list to the OpenAI format
-.tool_to_openai <- function(t) {
-  params <- t$parameters
-  if (is.character(params)) {
-    params <- jsonlite::fromJSON(params, simplifyVector = FALSE)
-  }
-  list(
-    type = "function",
-    `function` = list(
-      name = t$name,
-      description = if (is.null(t$description)) "" else t$description,
-      parameters = params
-    )
-  )
-}
-
-# Internal: the LLM callback invoked by the C++ engine.
-# This is the single point where an actual HTTP request to the LLM API happens.
-.llm_call <- function(provider, messages, tools, system_prompt) {
-  # Build request body in OpenAI chat-completions format
-  msgs <- list()
-  if (!is.null(system_prompt) && nchar(system_prompt) > 0) {
-    msgs[[length(msgs) + 1]] <- list(role = "system", content = system_prompt)
-  }
-  for (m in messages) {
-    msgs[[length(msgs) + 1]] <- .message_to_openai(m)
-  }
-
-  body <- list(
-    model = provider$model,
-    messages = msgs,
-    max_tokens = if (is.null(provider$max_tokens)) 4096 else provider$max_tokens,
-    temperature = if (is.null(provider$temperature)) 0.7 else provider$temperature,
-    stream = FALSE
-  )
-
-  if (length(tools) > 0) {
-    body$tools <- lapply(tools, .tool_to_openai)
-  }
-
-  url <- paste0(provider$base_url, "/chat/completions")
-  headers <- c(
-    "Content-Type" = "application/json",
-    "Authorization" = paste("Bearer", provider$api_key)
-  )
-
-  resp <- curl::curl_fetch_memory(
-    url,
-    handle = curl::new_handle(
-      customrequest = "POST",
-      postfields = jsonlite::toJSON(body, auto_unbox = TRUE, null = "null"),
-      httpheader = headers,
-      connecttimeout = 30,
-      timeout = 300
-    )
-  )
-
-  if (resp$status_code != 200) {
-    stop("LLM API error (", resp$status_code, "): ",
-         rawToChar(resp$content))
-  }
-
-  parsed <- jsonlite::fromJSON(rawToChar(resp$content), simplifyVector = FALSE)
-
-  if (!is.null(parsed$error)) {
-    stop("LLM API error: ", parsed$error$message)
-  }
-
-  choice <- parsed$choices[[1]]
-  msg <- choice$message
-
-  content <- msg$content
-  if (is.null(content)) content <- ""
-
-  finish_reason <- choice$finish_reason
-  if (is.null(finish_reason)) finish_reason <- "stop"
-
-  tool_calls <- list()
-  if (!is.null(msg$tool_calls)) {
-    tool_calls <- lapply(msg$tool_calls, function(tc) {
-      fn <- tc[["function"]]
-      list(
-        id = tc$id,
-        name = fn$name,
-        arguments = fn$arguments
-      )
-    })
-  }
-
-  list(
-    content = content,
-    finish_reason = finish_reason,
-    model = if (is.null(parsed$model)) provider$model else parsed$model,
-    tool_calls = tool_calls,
-    prompt_tokens = if (is.null(parsed$usage$prompt_tokens)) 0 else parsed$usage$prompt_tokens,
-    completion_tokens = if (is.null(parsed$usage$completion_tokens)) 0 else parsed$usage$completion_tokens,
-    total_tokens = if (is.null(parsed$usage$total_tokens)) 0 else parsed$usage$total_tokens
-  )
-}
-
 #' Send a single chat message to an LLM
 #'
 #' @param message The user message
@@ -136,9 +8,7 @@
 chat <- function(message, provider, system_prompt = "") {
   messages <- list(user_msg(message))
   chat_native_cpp(
-    api_key = provider$api_key,
-    model = provider$model,
-    base_url = provider$base_url,
+    provider = provider,
     messages_r = messages,
     system_prompt = system_prompt
   )
@@ -157,9 +27,7 @@ chat <- function(message, provider, system_prompt = "") {
 #' @export
 chat_parallel <- function(messages, provider, n_threads = 4L, system_prompt = "") {
   chat_parallel_cpp(
-    api_key = provider$api_key,
-    model = provider$model,
-    base_url = provider$base_url,
+    provider = provider,
     messages_list = messages,
     system_prompt = system_prompt,
     n_threads = as.integer(n_threads)
@@ -174,11 +42,35 @@ chat_parallel <- function(messages, provider, n_threads = 4L, system_prompt = ""
 #' @param state_data Named list of additional state data
 #' @param n_threads Thread pool size for parallel nodes (0 = auto)
 #' @param on_token Optional callback invoked for each streamed token
+#' @param on_event Optional callback invoked for engine lifecycle events
+#'   (node_start, node_end, llm_start, llm_end, tool_call, tool_result,
+#'   iteration, parallel_start, parallel_end, interrupt, complete). Signature:
+#'   \code{function(event, data)} where \code{data} is a named list.
 #' @param resume_from Internal: node ID to resume execution from (used by resume())
+#' @param checkpoint_path Optional file path. When set, the graph state is
+#'   persisted (atomically) to this file after every node and on interrupt, so
+#'   a crashed run can be resumed with checkpoint_resume().
+#' @param log_path Optional file path. When set, every engine event
+#'   (node/LLM/tool lifecycle) is appended as one JSON line, giving a durable
+#'   trace of token usage, latency, and tool calls.
+#' @param max_total_tokens Kill switch: abort the run once cumulative token
+#'   usage across all LLM calls exceeds this (0 = unlimited).
+#' @param max_time_sec Kill switch: abort the run once wall-clock seconds
+#'   elapsed exceed this (0 = unlimited).
+#' @param max_cost_usd Kill switch: abort the run once the estimated cost
+#'   exceeds this USD amount (0 = unlimited; requires per-provider pricing
+#'   set via [provider_pricing()]).
+#' @param tenant Optional [tenant()] to enforce rate limits / usage caps and
+#'   record an audit line for this run.
 #' @return The final state after graph execution
 #' @export
 run <- function(graph, state, tools = list(), state_data = list(),
-                n_threads = 0L, on_token = NULL, resume_from = "") {
+                n_threads = 0L, on_token = NULL, resume_from = "",
+                on_event = NULL, checkpoint_path = NULL, log_path = NULL,
+                max_total_tokens = 0L, max_time_sec = 0, max_cost_usd = 0,
+                tenant = NULL) {
+  if (is.null(checkpoint_path)) checkpoint_path <- ""
+  if (is.null(log_path)) log_path <- ""
   messages <- list()
   if (is.list(state) && !is.null(names(state))) {
     if ("messages" %in% names(state)) {
@@ -202,6 +94,20 @@ run <- function(graph, state, tools = list(), state_data = list(),
   if (length(tools) > 0) server <- .start_tool_server(tools)
   on.exit(.stop_tool_server(server), add = TRUE)
 
+  # Wrap the R on_event function so that the JSON payload string from C++ is
+  # parsed into a named list before it reaches the user callback.
+  # Always collect metrics from engine events (and call the user's callback).
+  on_event_wrapped <- .wrap_event_callback(on_event)
+
+  tenant_before <- NULL
+  if (!is.null(tenant)) {
+    if (!inherits(tenant, "agentgraph_tenant")) {
+      stop("run(): `tenant` must be created by tenant() or NULL.")
+    }
+    .tenant_check(tenant)
+    tenant_before <- agentgraph_usage()
+  }
+
   result <- run_graph_cpp(
     graph_config = graph_config,
     state_data = state_data,
@@ -210,10 +116,126 @@ run <- function(graph, state, tools = list(), state_data = list(),
     n_threads = as.integer(n_threads),
     on_token = on_token,
     resume_from = resume_from,
-    tool_server_port = if (is.null(server)) 0L else server$port
+    tool_server_port = if (is.null(server)) 0L else server$port,
+    tool_server_token = if (is.null(server)) "" else server$token,
+    on_event = on_event_wrapped,
+    checkpoint_path = checkpoint_path,
+    log_path = log_path,
+    max_total_tokens = as.integer(max_total_tokens),
+    max_time_sec = as.numeric(max_time_sec),
+    max_cost_usd = as.numeric(max_cost_usd)
   )
 
+  if (!is.null(tenant)) {
+    tenant_after <- agentgraph_usage()
+    .tenant_record(tenant,
+                   tenant_after$total_tokens - tenant_before$total_tokens,
+                   tenant_after$cost_usd - tenant_before$cost_usd)
+  }
+
+  .metrics_write()
   result
+}
+
+#' Load a crash-durable checkpoint written by run()/resume()
+#'
+#' Reads a checkpoint file created with \code{checkpoint_path} and returns a
+#' list with two elements: \code{state} (same shape as a run() return value:
+#' \code{data} plus \code{messages}) and \code{resume_node} (the next node that
+#' would run; empty or \code{"__end__"} means the run had already completed).
+#'
+#' @param checkpoint_path Path to a checkpoint file written by the engine
+#' @return A list with `state` and `resume_node`
+#' @export
+checkpoint_load <- function(checkpoint_path) {
+  checkpoint_load_cpp(checkpoint_path)
+}
+
+#' Resume a graph from a crash-durable checkpoint
+#'
+#' Loads a checkpoint file, then continues execution from the node where the
+#' previous run stopped. If the checkpoint marks the run as already complete
+#' (\code{resume_node} empty or \code{"__end__"}), the saved state is returned
+#' unchanged. When \code{checkpoint_path} is reused, execution keeps appending
+#' checkpoints so the run remains crash-safe across resumptions.
+#'
+#' @param graph The same graph object passed to the original run()
+#' @param checkpoint_path Path to a checkpoint file written by the engine
+#' @param tools List of tool definitions
+#' @param inject Named list of state values to set/override before resuming
+#' @param n_threads Thread pool size for parallel nodes (0 = auto)
+#' @param on_token Optional callback invoked for each streamed token
+#' @param on_event Optional callback invoked for engine lifecycle events
+#' @param log_path Optional file path to append a JSONL trace to while resuming
+#' @param max_total_tokens Kill switch on cumulative token usage (0 = unlimited)
+#' @param max_time_sec Kill switch on wall-clock seconds (0 = unlimited)
+#' @param max_cost_usd Kill switch on estimated USD cost (0 = unlimited)
+#' @return The final state after resuming
+#' @export
+checkpoint_resume <- function(graph, checkpoint_path, tools = list(),
+                              inject = list(), n_threads = 0L, on_token = NULL,
+                              on_event = NULL, log_path = NULL,
+                              max_total_tokens = 0L, max_time_sec = 0,
+                              max_cost_usd = 0) {
+  if (is.null(log_path)) log_path <- ""
+  loaded <- checkpoint_load_cpp(checkpoint_path)
+  state <- loaded$state
+  resume_node <- loaded$resume_node
+
+  # A completed run has no further node to resume.
+  if (is.null(resume_node) || nchar(resume_node) == 0 ||
+      identical(resume_node, "__end__")) {
+    return(state)
+  }
+
+  data <- state$data
+  if (is.null(data)) data <- list()
+
+  # Clear the in-memory interrupt markers so the resumed run starts cleanly.
+  # The actual resume target is `resume_node`, passed below as `resume_from`
+  # (a subgraph resume still re-enters via `__resume_path__`, which we keep).
+  data[["__interrupted__"]] <- NULL
+  data[["__resume_node__"]] <- NULL
+
+  for (k in names(inject)) {
+    data[[k]] <- jsonlite::toJSON(inject[[k]], auto_unbox = TRUE)
+  }
+
+  messages <- state$messages
+  if (is.null(messages)) messages <- list()
+
+  graph_config <- list(
+    entry_point = graph$entry_point,
+    nodes = graph$nodes,
+    edges = graph$edges,
+    max_iterations = graph$max_iterations
+  )
+
+  server <- NULL
+  if (length(tools) > 0) server <- .start_tool_server(tools)
+  on.exit(.stop_tool_server(server), add = TRUE)
+
+  on_event_wrapped <- .wrap_event_callback(on_event)
+
+  res <- run_graph_cpp(
+    graph_config = graph_config,
+    state_data = data,
+    messages_r = messages,
+    tools_r = tools,
+    n_threads = as.integer(n_threads),
+    on_token = on_token,
+    resume_from = resume_node,
+    tool_server_port = if (is.null(server)) 0L else server$port,
+    tool_server_token = if (is.null(server)) "" else server$token,
+    on_event = on_event_wrapped,
+    checkpoint_path = checkpoint_path,
+    log_path = log_path,
+    max_total_tokens = as.integer(max_total_tokens),
+    max_time_sec = as.numeric(max_time_sec),
+    max_cost_usd = as.numeric(max_cost_usd)
+  )
+  .metrics_write()
+  res
 }
 
 #' Test whether a returned state was paused by an interrupt node
@@ -243,10 +265,20 @@ is_interrupted <- function(state) {
 #'   (e.g. \code{list(approved = TRUE)}); values are JSON-encoded automatically
 #' @param n_threads Thread pool size for parallel nodes (0 = auto)
 #' @param on_token Optional callback invoked for each streamed token
+#' @param on_event Optional callback invoked for engine lifecycle events
+#' @param checkpoint_path Optional file path to persist state to while resuming
+#' @param log_path Optional file path to append a JSONL trace to while resuming
+#' @param max_total_tokens Kill switch on cumulative token usage (0 = unlimited)
+#' @param max_time_sec Kill switch on wall-clock seconds (0 = unlimited)
+#' @param max_cost_usd Kill switch on estimated USD cost (0 = unlimited)
 #' @return The final state after resuming (may itself be interrupted again)
 #' @export
 resume <- function(graph, interrupted_state, tools = list(),
-                   inject = list(), n_threads = 0L, on_token = NULL) {
+                   inject = list(), n_threads = 0L, on_token = NULL,
+                   on_event = NULL, checkpoint_path = NULL, log_path = NULL,
+                   max_total_tokens = 0L, max_time_sec = 0, max_cost_usd = 0) {
+  if (is.null(checkpoint_path)) checkpoint_path <- ""
+  if (is.null(log_path)) log_path <- ""
   data <- interrupted_state$data
   if (is.null(data) || is.null(data[["__resume_node__"]])) {
     stop("resume(): the provided state is not an interrupted state (no __resume_node__).")
@@ -278,7 +310,9 @@ resume <- function(graph, interrupted_state, tools = list(),
   if (length(tools) > 0) server <- .start_tool_server(tools)
   on.exit(.stop_tool_server(server), add = TRUE)
 
-  run_graph_cpp(
+  on_event_wrapped <- .wrap_event_callback(on_event)
+
+  res <- run_graph_cpp(
     graph_config = graph_config,
     state_data = data,
     messages_r = messages,
@@ -286,8 +320,17 @@ resume <- function(graph, interrupted_state, tools = list(),
     n_threads = as.integer(n_threads),
     on_token = on_token,
     resume_from = resume_node,
-    tool_server_port = if (is.null(server)) 0L else server$port
+    tool_server_port = if (is.null(server)) 0L else server$port,
+    tool_server_token = if (is.null(server)) "" else server$token,
+    on_event = on_event_wrapped,
+    checkpoint_path = checkpoint_path,
+    log_path = log_path,
+    max_total_tokens = as.integer(max_total_tokens),
+    max_time_sec = as.numeric(max_time_sec),
+    max_cost_usd = as.numeric(max_cost_usd)
   )
+  .metrics_write()
+  res
 }
 
 #' Run a graph with streaming output
@@ -296,14 +339,24 @@ resume <- function(graph, interrupted_state, tools = list(),
 #' @param state Initial state
 #' @param tools List of tool definitions
 #' @param on_token Callback function for each streamed token
-#' @param on_event Callback function for graph events (reserved)
+#' @param on_event Callback function for engine lifecycle events
 #' @param state_data Named list of additional state data
 #' @param n_threads Thread pool size for parallel nodes (0 = auto)
+#' @param checkpoint_path Optional file path to persist state to while running
+#' @param log_path Optional file path to append a JSONL trace to while running
+#' @param max_total_tokens Kill switch on cumulative token usage (0 = unlimited)
+#' @param max_time_sec Kill switch on wall-clock seconds (0 = unlimited)
+#' @param max_cost_usd Kill switch on estimated USD cost (0 = unlimited)
 #' @return The final state
 #' @export
 stream <- function(graph, state, tools = list(),
                    on_token = NULL, on_event = NULL,
-                   state_data = list(), n_threads = 0L) {
+                   state_data = list(), n_threads = 0L,
+                   checkpoint_path = NULL, log_path = NULL,
+                   max_total_tokens = 0L, max_time_sec = 0, max_cost_usd = 0) {
   run(graph, state, tools, state_data,
-      n_threads = n_threads, on_token = on_token)
+      n_threads = n_threads, on_token = on_token, on_event = on_event,
+      checkpoint_path = checkpoint_path, log_path = log_path,
+      max_total_tokens = max_total_tokens, max_time_sec = max_time_sec,
+      max_cost_usd = max_cost_usd)
 }

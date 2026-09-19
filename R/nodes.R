@@ -3,16 +3,37 @@
 #' @param provider A provider configuration (from provider_openai(), etc.)
 #' @param system_prompt System prompt for the LLM
 #' @param tools Character vector of tool names this node can use
+#' @param window_size When > 0, only the last \code{window_size} messages are
+#'   sent to the model (context-window buffer). 0 disables windowing.
+#' @param summarize When TRUE (and \code{window_size} > 0), messages evicted by
+#'   the window are compressed into a running summary and injected as a leading
+#'   system message.
+#' @param entity_memory When TRUE, named facts are extracted from each turn into
+#'   a JSON object in state and injected as context on subsequent turns.
+#' @param summary_system_prompt Optional custom system prompt for summarization.
 #' @return A node configuration list
 #' @export
 llm_node <- function(provider,
                      system_prompt = "",
-                     tools = character(0)) {
+                     tools = character(0),
+                     window_size = 0L,
+                     summarize = FALSE,
+                     entity_memory = FALSE,
+                     summary_system_prompt = "") {
+  if (is.null(provider)) {
+    stop("llm_node(): `provider` must be a provider configuration (from provider_openai(), etc.), not NULL.")
+  }
   list(
     type = "llm",
     provider = provider,
     system_prompt = system_prompt,
-    tool_names = tools
+    tool_names = tools,
+    memory = list(
+      window_size = as.integer(window_size),
+      summarize = isTRUE(summarize),
+      entity_memory = isTRUE(entity_memory),
+      summary_system_prompt = summary_system_prompt
+    )
   )
 }
 

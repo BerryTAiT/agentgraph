@@ -4,7 +4,15 @@
 \alias{llm_node}
 \title{Create an LLM node}
 \usage{
-llm_node(provider, system_prompt = "", tools = character(0))
+llm_node(
+  provider,
+  system_prompt = "",
+  tools = character(0),
+  window_size = 0L,
+  summarize = FALSE,
+  entity_memory = FALSE,
+  summary_system_prompt = ""
+)
 }
 \arguments{
 \item{provider}{A provider configuration (from provider_openai(), etc.)}
@@ -12,6 +20,18 @@ llm_node(provider, system_prompt = "", tools = character(0))
 \item{system_prompt}{System prompt for the LLM}
 
 \item{tools}{Character vector of tool names this node can use}
+
+\item{window_size}{When > 0, only the last \code{window_size} messages are
+sent to the model (context-window buffer). 0 disables windowing.}
+
+\item{summarize}{When TRUE (and \code{window_size} > 0), messages evicted by
+the window are compressed into a running summary and injected as a leading
+system message.}
+
+\item{entity_memory}{When TRUE, named facts are extracted from each turn into
+a JSON object in state and injected as context on subsequent turns.}
+
+\item{summary_system_prompt}{Optional custom system prompt for summarization.}
 }
 \value{
 A node configuration list

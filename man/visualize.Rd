@@ -2,16 +2,23 @@
 % Please edit documentation in R/ui-helpers.R
 \name{visualize}
 \alias{visualize}
-\title{Visualize a graph structure}
+\title{Visualize a graph (print Mermaid or write an interactive HTML file)}
 \usage{
-visualize(graph)
+visualize(graph, file = NULL, open = FALSE)
 }
 \arguments{
 \item{graph}{A graph object}
+
+\item{file}{Optional path to write an interactive HTML file}
+
+\item{open}{If TRUE and \code{file} is set, open the file in a browser}
 }
 \value{
-A visualization (prints mermaid diagram)
+Invisibly the Mermaid lines (no file) or \code{file}
 }
 \description{
-Visualize a graph structure
+With no \code{file} argument, prints the Mermaid source of the graph (the static
+form). With \code{file}, writes a self-contained HTML page that renders the graph
+interactively in a browser (Mermaid.js loaded from a CDN); set \code{open = TRUE}
+to open it immediately.
 }

@@ -17,8 +17,9 @@ class NodeRunner {
 public:
     NodeRunner(ToolRegistry& tools,
                const TokenCallback& on_token = nullptr,
-               const NodeEventCallback& on_event = nullptr)
-        : tools_(tools), on_token_(on_token), on_event_(on_event) {}
+               const NodeEventCallback& on_event = nullptr,
+               UsageTrackerPtr usage = nullptr)
+        : tools_(tools), on_token_(on_token), on_event_(on_event), usage_(usage) {}
 
     Result<void> run_node(const NodeConfig& node, GraphState& state);
 
@@ -29,6 +30,7 @@ private:
     ToolRegistry& tools_;
     TokenCallback on_token_;
     NodeEventCallback on_event_;
+    UsageTrackerPtr usage_;
 };
 
 } // namespace agentgraph

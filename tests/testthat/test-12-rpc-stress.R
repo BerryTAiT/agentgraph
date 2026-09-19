@@ -13,16 +13,22 @@ test_that("RPC tool server handles single, concurrent, and unknown-tool calls", 
   server <- agentgraph:::.start_tool_server(list(in_tool))
   expect_true(!is.null(server$port) && is.numeric(server$port))
   port <- server$port
+  token <- server$token
 
-  base <- agentgraph:::rpc_call_cpp(port, "in_tool", '{"x":5}')
+  base <- agentgraph:::rpc_call_cpp(port, "in_tool", '{"x":5}', token)
   expect_true(base$ok)
   expect_equal(
     as.numeric(jsonlite::fromJSON(base$result, simplifyVector = FALSE)$result),
     10
   )
 
+  # Unauthenticated requests are refused.
+  unauth <- agentgraph:::rpc_call_cpp(port, "in_tool", '{"x":5}')
+  expect_false(unauth$ok)
+  expect_true(grepl("unauthorized", unauth$error, fixed = TRUE))
+
   stress <- agentgraph:::rpc_stress_cpp(
-    port, "in_tool", '{"x":3}', n_calls = 8L, n_threads = 4L
+    port, "in_tool", '{"x":3}', n_calls = 8L, n_threads = 4L, token
   )
   expect_identical(stress$n, 8L)
   expect_identical(stress$ok, 8L)
@@ -32,7 +38,7 @@ test_that("RPC tool server handles single, concurrent, and unknown-tool calls", 
                  numeric(1))
   expect_true(all(vals == 6))
 
-  bad <- agentgraph:::rpc_call_cpp(port, "no_such_tool", "{}")
+  bad <- agentgraph:::rpc_call_cpp(port, "no_such_tool", "{}", token)
   expect_false(bad$ok)
   expect_true(grepl("Tool not found", bad$error, fixed = TRUE))
 })

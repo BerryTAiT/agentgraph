@@ -6,25 +6,35 @@
 # the chosen port through a ready file, then serves newline-delimited JSON
 # requests:
 #
-#   request:  {"name": "<tool>", "args_json": "<raw JSON string of arguments>"}
+#   request:  {"name": "<tool>", "args_json": "<raw JSON string of arguments>",
+#              "token": "<auth token>"}
 #   response: {"ok": true, "result_str": "<raw JSON string returned by handler>"}
 #          or {"ok": false, "error": "<message>"}
+#
+# Requests whose `token` does not match the parent-generated token are rejected:
+# base R server sockets bind on all interfaces, so the token stops any other
+# process (local or on the network) from invoking tool handlers while a run is
+# active.
 #
 # The handler receives the args JSON string exactly as the C++ engine dumped
 # it (same contract as the in-process callback path) and returns a JSON
 # string. The server is a pure pipe: it never re-serializes args or results,
 # so semantics are identical to direct in-process tool handlers.
 #
-# Usage: Rscript tool_server.R <handlers_rds> <port_file> <port_start> <port_end>
+# Usage: Rscript tool_server.R <handlers_rds> <port_file> <port_start> <port_end> <auth_token>
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 4) {
-  stop("usage: tool_server.R <handlers_rds> <port_file> <port_start> <port_end>")
+if (length(args) < 5) {
+  stop("usage: tool_server.R <handlers_rds> <port_file> <port_start> <port_end> <auth_token>")
 }
 handlers_file <- args[1]
 port_file <- args[2]
 port_start <- as.integer(args[3])
 port_end <- as.integer(args[4])
+auth_token <- args[5]
+if (!nzchar(auth_token)) {
+  stop("tool_server: empty auth token (refusing to serve without authentication)")
+}
 
 suppressPackageStartupMessages(library(jsonlite))
 
@@ -72,6 +82,10 @@ serve_connection <- function(con) {
 
     resp <- tryCatch({
       req <- fromJSON(line, simplifyVector = FALSE)
+      if (!is.character(req$token) || length(req$token) != 1L ||
+          !identical(req$token, auth_token)) {
+        stop("unauthorized: missing or invalid auth token")
+      }
       if (is.null(req$name)) stop("request missing 'name'")
       h <- get0(req$name, envir = handlers, inherits = FALSE, ifnotfound = NULL)
       if (is.null(h)) {

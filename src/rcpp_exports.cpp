@@ -4,6 +4,7 @@
 #include "core/state.hpp"
 #include "core/errors.hpp"
 #include "llm/llm_client.hpp"
+#include "llm/usage_registry.hpp"
 #include "tools/tool.hpp"
 #include "tools/rpc_tool_client.hpp"
 #include "tools/builtin/builtin_tools.hpp"
@@ -12,6 +13,21 @@
 #include "BS_thread_pool.hpp"
 
 #include <memory>
+#include <fstream>
+#include <sstream>
+#include <cstdio>
+#include <chrono>
+#include <mutex>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 using namespace agentgraph;
 
@@ -23,6 +39,74 @@ static bool list_has(const Rcpp::List& l, const std::string& name) {
     }
     return false;
 }
+
+// Atomic write of a checkpoint file: serialize to a temp file, flush, then
+// atomically rename over the destination. This keeps the checkpoint intact if
+// the process is killed mid-write. Best-effort: a failed write leaves the
+// previous checkpoint (if any) untouched.
+static void atomic_write_file(const std::string& path, const std::string& content) {
+    std::string tmp = path + ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out.is_open()) return;
+        out.write(content.data(), static_cast<std::streamsize>(content.size()));
+        out.flush();
+        if (!out.good()) {
+            out.close();
+            std::remove(tmp.c_str());
+            return;
+        }
+        out.close();
+    }
+#ifdef _WIN32
+    if (!MoveFileExA(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+        std::remove(path.c_str());
+        std::rename(tmp.c_str(), path.c_str());
+    }
+#else
+    if (std::rename(tmp.c_str(), path.c_str()) != 0) {
+        std::remove(tmp.c_str());
+    }
+#endif
+}
+
+// Serialize a GraphState plus a resume marker into the checkpoint JSON format:
+//   {"version":1, "resume_node":"...", "state":{"data":{...},"messages":[...]}}
+static void write_checkpoint(const std::string& path,
+                             const GraphState& state,
+                             const std::string& resume_node) {
+    json j;
+    j["version"] = 1;
+    j["resume_node"] = resume_node;
+    j["state"] = state.to_json();
+    atomic_write_file(path, j.dump(2));
+}
+
+// Structured JSONL tracer: appends one JSON object per line for every engine
+// event (node / llm / tool / checkpoint lifecycle), so a run can be inspected
+// and replayed offline. spdlog is not vendored, so this is a minimal,
+// dependency-free equivalent: thread-safe appends with a millisecond epoch
+// timestamp. Events are also forwarded to the R on_event callback when one is
+// supplied, so a single run can drive both a live UI and a durable trace file.
+struct TraceLogger {
+    std::mutex mu;
+    std::ofstream out;
+    explicit TraceLogger(const std::string& path) {
+        out.open(path, std::ios::app | std::ios::binary);
+    }
+    void log(const std::string& event_type, const json& data) {
+        if (!out.is_open()) return;
+        json entry;
+        entry["ts_ms"] = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::system_clock::now().time_since_epoch())
+                             .count();
+        entry["event"] = event_type;
+        entry["data"] = data;
+        std::lock_guard<std::mutex> lk(mu);
+        out << entry.dump() << "\n";
+        out.flush();
+    }
+};
 
 // [[Rcpp::export]]
 std::string hello_cpp() {
@@ -46,17 +130,11 @@ Rcpp::List http_get_cpp(std::string url) {
 }
 
 // [[Rcpp::export]]
-Rcpp::List chat_native_cpp(std::string api_key,
-                           std::string model,
-                           std::string base_url,
+Rcpp::List chat_native_cpp(Rcpp::List provider,
                            Rcpp::List messages_r,
                            std::string system_prompt)
 {
-    ProviderConfig config;
-    config.name = "openai";
-    config.api_key = api_key;
-    config.model = model;
-    config.base_url = base_url;
+    ProviderConfig config = provider_from_list(provider);
 
     auto client = create_llm_client(config);
     auto messages = messages_from_list(messages_r);
@@ -70,9 +148,7 @@ Rcpp::List chat_native_cpp(std::string api_key,
 }
 
 // [[Rcpp::export]]
-Rcpp::List chat_parallel_cpp(std::string api_key,
-                             std::string model,
-                             std::string base_url,
+Rcpp::List chat_parallel_cpp(Rcpp::List provider,
                              Rcpp::List messages_list,
                              std::string system_prompt,
                              int n_threads)
@@ -83,11 +159,7 @@ Rcpp::List chat_parallel_cpp(std::string api_key,
         return Rcpp::List();
     }
 
-    ProviderConfig config;
-    config.name = "openai";
-    config.api_key = api_key;
-    config.model = model;
-    config.base_url = base_url;
+    ProviderConfig config = provider_from_list(provider);
 
     // Pre-convert all messages to C++ on the main thread (R API is not
     // thread-safe, so all R object access happens here).
@@ -150,7 +222,7 @@ Rcpp::List parse_llm_response_cpp(std::string response_json) {
         auto& message = choice["message"];
 
         if (message.contains("content") && !message["content"].is_null()) {
-            response.content = message["content"].get<std::string>();
+            response.content = content_to_string(message["content"]);
         } else {
             response.content = "";
         }
@@ -195,7 +267,14 @@ Rcpp::List run_graph_cpp(Rcpp::List graph_config,
                           int n_threads = 0,
                           Rcpp::Nullable<Rcpp::Function> on_token = R_NilValue,
                           std::string resume_from = "",
-                          int tool_server_port = 0)
+                          int tool_server_port = 0,
+                          std::string tool_server_token = "",
+                          Rcpp::Nullable<Rcpp::Function> on_event = R_NilValue,
+                          std::string checkpoint_path = "",
+                          std::string log_path = "",
+                          int max_total_tokens = 0,
+                          double max_time_sec = 0.0,
+                          double max_cost_usd = 0.0)
 {
     auto config = graph_from_list(graph_config);
 
@@ -223,7 +302,8 @@ Rcpp::List run_graph_cpp(Rcpp::List graph_config,
     std::unique_ptr<RpcToolClient> rpc_client;
     if (tool_server_port > 0) {
         rpc_client = std::make_unique<RpcToolClient>(
-            "127.0.0.1", static_cast<std::uint16_t>(tool_server_port));
+            "127.0.0.1", static_cast<std::uint16_t>(tool_server_port),
+            tool_server_token);
     }
 
     if (tools_r.size() > 0) {
@@ -276,7 +356,48 @@ Rcpp::List run_graph_cpp(Rcpp::List graph_config,
         };
     }
 
-    Executor executor(registry, static_cast<unsigned>(n_threads), token_cb);
+    // Event callback: fires on the main thread for node/tool/LLM lifecycle
+    // events. The engine already emits node_start/node_end/llm_response/
+    // tool_call/tool_result/iteration/parallel_start/parallel_end; expose them
+    // to R so dashboards, tracers, and UIs can observe execution live. When
+    // log_path is set, every event is also appended to a JSONL trace file.
+    std::shared_ptr<TraceLogger> tracer;
+    if (!log_path.empty()) {
+        tracer = std::make_shared<TraceLogger>(log_path);
+    }
+
+    EventCallback event_cb = nullptr;
+    if (on_event.isNotNull()) {
+        Rcpp::Function f = on_event.get();
+        event_cb = [f, tracer](const std::string& event_type, const json& data) {
+            if (tracer) tracer->log(event_type, data);
+            f(Rcpp::wrap(event_type), Rcpp::wrap(data.dump()));
+        };
+    } else if (tracer) {
+        event_cb = [tracer](const std::string& event_type, const json& data) {
+            tracer->log(event_type, data);
+        };
+    }
+
+    // Crash-durable checkpointing: when checkpoint_path is set, persist the
+    // state (plus a resume marker) after every node and on interrupt. Runs on
+    // the main thread, never on the worker pool.
+    CheckpointCallback checkpoint_cb = nullptr;
+    if (!checkpoint_path.empty()) {
+        std::string cp_path = checkpoint_path;
+        checkpoint_cb = [cp_path](const GraphState& st, const std::string& resume_node) {
+            write_checkpoint(cp_path, st, resume_node);
+        };
+    }
+
+    BudgetConfig budget;
+    budget.max_total_tokens = max_total_tokens;
+    budget.max_time_sec = max_time_sec;
+    budget.max_cost_usd = max_cost_usd;
+    auto usage = std::make_shared<UsageTracker>();
+
+    Executor executor(registry, static_cast<unsigned>(n_threads), token_cb, event_cb, checkpoint_cb,
+                      budget, usage);
     auto result = executor.run(config, std::move(state), resume_from);
 
     if (result.is_err()) {
@@ -284,6 +405,100 @@ Rcpp::List run_graph_cpp(Rcpp::List graph_config,
     }
 
     return state_to_list(result.value());
+}
+
+// Load a checkpoint file into (state, resume_node). Returns a list with
+// `state` (same shape as run()'s return: `data` + `messages`) and `resume_node`
+// (empty or "__end__" means the run had already completed).
+// [[Rcpp::export]]
+Rcpp::List checkpoint_load_cpp(std::string checkpoint_path) {
+    std::ifstream in(checkpoint_path, std::ios::binary);
+    if (!in.is_open()) {
+        Rcpp::stop("Checkpoint file not found: " + checkpoint_path);
+    }
+    std::stringstream ss;
+    ss << in.rdbuf();
+    std::string content = ss.str();
+
+    json j;
+    try {
+        j = json::parse(content);
+    } catch (const std::exception& e) {
+        Rcpp::stop(std::string("Failed to parse checkpoint file: ") + e.what());
+    }
+
+    GraphState state;
+    if (j.is_object() && j.contains("state") && j["state"].is_object()) {
+        state = GraphState::from_json(j["state"]);
+    } else {
+        // Legacy format: the whole file is the state object.
+        state = GraphState::from_json(j);
+    }
+
+    std::string resume_node;
+    if (j.is_object() && j.contains("resume_node") && j["resume_node"].is_string()) {
+        resume_node = j["resume_node"].get<std::string>();
+    }
+
+    Rcpp::List out;
+    out["state"] = state_to_list(state);
+    out["resume_node"] = resume_node;
+    return out;
+}
+
+// Clear the process-wide LLM exact cache. With an empty namespace, all
+// provider caches are cleared; with a namespace, only that provider's cache.
+// [[Rcpp::export]]
+void cache_clear_cpp(std::string ns = "") {
+    if (ns.empty()) {
+        LLMCacheRegistry::instance().clear_all();
+    } else {
+        LLMCacheRegistry::instance().clear(ns);
+    }
+}
+
+// Snapshot of the process-wide LLM exact cache: one row per provider
+// namespace with its current entry count. Namespace strings encode
+// name|base_url|model|api_version (the same key used by CachedLLMClient).
+// [[Rcpp::export]]
+Rcpp::DataFrame cache_stats_cpp() {
+    auto snap = LLMCacheRegistry::instance().snapshot();
+    int n = static_cast<int>(snap.size());
+    Rcpp::CharacterVector ns(n);
+    Rcpp::IntegerVector counts(n);
+    for (int i = 0; i < n; i++) {
+        ns[i] = snap[static_cast<size_t>(i)].first;
+        counts[i] = static_cast<int>(snap[static_cast<size_t>(i)].second);
+    }
+    return Rcpp::DataFrame::create(
+        Rcpp::Named("namespace") = ns,
+        Rcpp::Named("entries") = counts);
+}
+
+// Reset the process-wide session usage accumulator (tokens + estimated cost).
+// [[Rcpp::export]]
+void usage_reset_cpp() {
+    UsageRegistry::instance().reset();
+}
+
+// Snapshot of the process-wide session usage accumulator.
+// [[Rcpp::export]]
+Rcpp::List usage_stats_cpp() {
+    auto& u = UsageRegistry::instance();
+    return Rcpp::List::create(
+        Rcpp::Named("prompt_tokens") = static_cast<double>(u.prompt_tokens.load()),
+        Rcpp::Named("completion_tokens") = static_cast<double>(u.completion_tokens.load()),
+        Rcpp::Named("total_tokens") = static_cast<double>(u.total_tokens.load()),
+        Rcpp::Named("cost_usd") = u.cost_usd.load());
+}
+
+// Process-global LLM cache hit/miss counters (for metrics).
+// [[Rcpp::export]]
+Rcpp::List cache_hit_stats_cpp() {
+    auto& reg = LLMCacheRegistry::instance();
+    return Rcpp::List::create(
+        Rcpp::Named("hits") = static_cast<double>(reg.hits()),
+        Rcpp::Named("misses") = static_cast<double>(reg.misses()));
 }
 
 // [[Rcpp::export]]
@@ -307,8 +522,9 @@ Rcpp::List test_tool_cpp(std::string tool_name, std::string args_json) {
 
 // Test hook: execute one RPC tool call against a running tool server.
 // [[Rcpp::export]]
-Rcpp::List rpc_call_cpp(int port, std::string tool_name, std::string args_json) {
-    RpcToolClient client("127.0.0.1", static_cast<std::uint16_t>(port));
+Rcpp::List rpc_call_cpp(int port, std::string tool_name, std::string args_json,
+                        std::string token = "") {
+    RpcToolClient client("127.0.0.1", static_cast<std::uint16_t>(port), token);
     json args;
     try { args = json::parse(args_json); } catch (...) { args = json::object(); }
 
@@ -329,8 +545,9 @@ Rcpp::List rpc_call_cpp(int port, std::string tool_name, std::string args_json) 
 // parallel fan-out.
 // [[Rcpp::export]]
 Rcpp::List rpc_stress_cpp(int port, std::string tool_name, std::string args_json,
-                          int n_calls = 8, int n_threads = 4) {
-    RpcToolClient client("127.0.0.1", static_cast<std::uint16_t>(port));
+                          int n_calls = 8, int n_threads = 4,
+                          std::string token = "") {
+    RpcToolClient client("127.0.0.1", static_cast<std::uint16_t>(port), token);
     json args;
     try { args = json::parse(args_json); } catch (...) { args = json::object(); }
 

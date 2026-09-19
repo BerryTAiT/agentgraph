@@ -10,7 +10,13 @@ resume(
   tools = list(),
   inject = list(),
   n_threads = 0L,
-  on_token = NULL
+  on_token = NULL,
+  on_event = NULL,
+  checkpoint_path = NULL,
+  log_path = NULL,
+  max_total_tokens = 0L,
+  max_time_sec = 0,
+  max_cost_usd = 0
 )
 }
 \arguments{
@@ -26,6 +32,18 @@ resume(
 \item{n_threads}{Thread pool size for parallel nodes (0 = auto)}
 
 \item{on_token}{Optional callback invoked for each streamed token}
+
+\item{on_event}{Optional callback invoked for engine lifecycle events}
+
+\item{checkpoint_path}{Optional file path to persist state to while resuming}
+
+\item{log_path}{Optional file path to append a JSONL trace to while resuming}
+
+\item{max_total_tokens}{Kill switch on cumulative token usage (0 = unlimited)}
+
+\item{max_time_sec}{Kill switch on wall-clock seconds (0 = unlimited)}
+
+\item{max_cost_usd}{Kill switch on estimated USD cost (0 = unlimited)}
 }
 \value{
 The final state after resuming (may itself be interrupted again)

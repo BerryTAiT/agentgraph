@@ -1,0 +1,1041 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>agentgraph — R to think, C++ to run</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+/* ============================================================
+   CORE — fixed 1920x1080 design canvas, scaled to fit viewport.
+   Nothing can ever overflow: the whole stage shrinks as one.
+   ============================================================ */
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{
+  background:#03040a;
+  font-family:'Inter',system-ui,-apple-system,sans-serif;
+  color:#e8edf7;-webkit-font-smoothing:antialiased;
+}
+#viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(120% 90% at 50% 0%,#0a0f22 0%,#03040a 60%)}
+#stage{width:1920px;height:1080px;position:relative;flex:none;transform-origin:center center}
+
+/* ---------- slide base ---------- */
+.slide{position:absolute;inset:0;padding:84px 118px 118px;opacity:0;visibility:hidden;
+  transition:opacity .5s ease,visibility .5s;display:flex;flex-direction:column;overflow:hidden}
+.slide.active{opacity:1;visibility:visible;z-index:2}
+.content{position:relative;z-index:2;display:flex;flex-direction:column;height:100%;min-height:0}
+.body{flex:1;min-height:0;display:flex;flex-direction:column}
+
+/* ---------- ambient fx (inside canvas) ---------- */
+.fx{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.fx .aur{position:absolute;inset:-25%;
+  background:radial-gradient(42% 38% at 16% 20%,rgba(99,102,241,.20),transparent 70%),
+             radial-gradient(38% 36% at 84% 24%,rgba(34,211,238,.13),transparent 70%),
+             radial-gradient(44% 40% at 55% 88%,rgba(251,146,60,.07),transparent 70%);
+  animation:aur 26s ease-in-out infinite alternate;filter:blur(14px)}
+@keyframes aur{0%{transform:translate(0,0) rotate(0deg)}100%{transform:translate(4%,-3%) rotate(2.5deg)}}
+.fx .grid{position:absolute;inset:0;
+  background-image:linear-gradient(rgba(139,148,248,.05) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(139,148,248,.05) 1px,transparent 1px);
+  background-size:72px 72px;
+  mask-image:radial-gradient(75% 70% at 50% 42%,#000 30%,transparent 100%);
+  -webkit-mask-image:radial-gradient(75% 70% at 50% 42%,#000 30%,transparent 100%);
+  animation:gridpulse 9s ease-in-out infinite}
+@keyframes gridpulse{0%,100%{opacity:.55}50%{opacity:1}}
+.fx .orb{position:absolute;border-radius:50%;filter:blur(2px)}
+.fx .o1{width:340px;height:340px;left:-120px;top:14%;background:radial-gradient(circle at 35% 35%,rgba(129,140,248,.16),transparent 70%);animation:orb1 22s ease-in-out infinite alternate}
+.fx .o2{width:420px;height:420px;right:-140px;bottom:6%;background:radial-gradient(circle at 60% 40%,rgba(34,211,238,.12),transparent 70%);animation:orb2 28s ease-in-out infinite alternate}
+.fx .o3{width:260px;height:260px;right:16%;top:-90px;background:radial-gradient(circle at 50% 50%,rgba(251,146,60,.10),transparent 70%);animation:orb1 19s ease-in-out infinite alternate-reverse}
+@keyframes orb1{0%{transform:translate(0,0)}100%{transform:translate(60px,50px)}}
+@keyframes orb2{0%{transform:translate(0,0)}100%{transform:translate(-70px,-40px)}}
+.fx .beam{position:absolute;left:-10%;width:120%;height:1px;top:22%;
+  background:linear-gradient(90deg,transparent,rgba(129,140,248,.35) 30%,rgba(34,211,238,.3) 60%,transparent);
+  animation:beam 7s ease-in-out infinite}
+@keyframes beam{0%,100%{transform:translateY(0);opacity:.4}50%{transform:translateY(26px);opacity:.9}}
+.fx .beam.b2{top:auto;bottom:24%;animation-delay:-3.4s}
+.vig{position:absolute;inset:0;pointer-events:none;z-index:1;
+  background:radial-gradient(130% 110% at 50% 40%,transparent 55%,rgba(2,3,8,.55) 100%)}
+
+/* ---------- entrance animation ---------- */
+.an{opacity:0;transform:translateY(28px);
+  transition:opacity .75s cubic-bezier(.22,1,.36,1),transform .75s cubic-bezier(.22,1,.36,1)}
+.an.l{transform:translateX(-38px)}
+.an.r{transform:translateX(38px)}
+.an.s{transform:scale(.95)}
+.slide.active .an{opacity:1;transform:none;transition-delay:var(--d,0s)}
+
+/* ---------- typography ---------- */
+.kick{font:600 17px/1 'JetBrains Mono',monospace;letter-spacing:.32em;text-transform:uppercase;color:#818cf8;margin-bottom:22px}
+.kick em{font-style:normal;color:#fb923c}
+.ht{font-family:'Space Grotesk',sans-serif;font-size:62px;font-weight:700;line-height:1.05;
+  letter-spacing:-.018em;color:#f4f7ff;margin-bottom:14px}
+.gtx{background:linear-gradient(92deg,#818cf8,#22d3ee 46%,#fb923c);background-size:250% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;
+  animation:gflow 5.5s linear infinite}
+@keyframes gflow{to{background-position:250% 0}}
+.kline{height:2px;width:120px;margin:22px 0 0;border:none;border-radius:2px;
+  background:linear-gradient(90deg,#818cf8,#22d3ee 55%,#fb923c)}
+.prose p{font-size:23px;line-height:1.62;color:#aab6cf;margin-bottom:22px}
+.prose p:last-child{margin-bottom:0}
+.prose b,.prose strong{color:#eef2fb;font-weight:600}
+.mono{font-family:'JetBrains Mono',monospace}
+.ac{color:#22d3ee}.ao{color:#fb923c}.ai{color:#818cf8}
+
+/* ---------- open layouts (no boxes) ---------- */
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:0 84px;flex:1;min-height:0}
+.duo>.c2{border-left:1px solid rgba(139,148,248,.16);padding-left:84px}
+.duo>.c1{padding-right:0}
+.ed{display:grid;grid-template-columns:92px 1fr;gap:0 26px;padding:19px 0;border-top:1px solid rgba(139,148,248,.15)}
+.ed:first-child{border-top:none;padding-top:6px}
+.ed .n{font:700 27px/1.15 'JetBrains Mono',monospace;color:#525d7d;padding-top:5px}
+.ed h3{font-size:26px;font-weight:700;color:#f4f7ff;margin-bottom:9px;letter-spacing:-.01em}
+.ed p{font-size:19.5px;line-height:1.52;color:#a6b2cc}
+.ed p b{color:#e9eefb}
+.ed p .mono{font-size:17.5px;color:#7dd3e8}
+
+/* headline rows (agenda / takeaways) */
+.hr{display:grid;grid-template-columns:130px 480px 1fr;gap:44px;align-items:center;
+  padding:24px 0;border-top:1px solid rgba(139,148,248,.15)}
+.hr:first-child{border-top:none}
+.hr .n{font:700 64px/1 'Space Grotesk',sans-serif;
+  background:linear-gradient(120deg,#818cf8,#22d3ee);-webkit-background-clip:text;background-clip:text;
+  color:transparent;-webkit-text-fill-color:transparent}
+.hr .t{font-size:31px;font-weight:700;color:#f4f7ff;letter-spacing:-.01em}
+.hr .t small{display:block;font:500 15px/1.4 'JetBrains Mono',monospace;color:#5b6787;margin-top:7px;letter-spacing:.08em}
+.hr .d{font-size:19.5px;line-height:1.55;color:#a6b2cc}
+
+/* big stat strip (open, hairline separated) */
+.stats{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;margin-top:8px}
+.stats>div{padding:10px 44px;border-left:1px solid rgba(139,148,248,.16)}
+.stats>div:first-child{border-left:none;padding-left:0}
+.stats .v{font:700 84px/1 'JetBrains Mono',monospace;color:#f4f7ff;letter-spacing:-.03em}
+.stats .v .u{font-size:36px;color:#6b7694}
+.stats .v.ci{color:#818cf8}.stats .v.cc{color:#22d3ee}.stats .v.co{color:#fb923c}.stats .v.cg{color:#4ade80}
+.stats .k{font-size:17.5px;line-height:1.5;color:#a6b2cc;margin-top:14px}
+.stats .k b{color:#e9eefb}
+
+/* timeline (open) */
+.tline{position:relative;flex:1;display:grid;grid-template-columns:repeat(6,1fr);gap:30px;margin-top:56px}
+.tline::before{content:"";position:absolute;top:9px;left:1%;right:1%;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,rgba(248,113,113,.75),rgba(251,146,60,.75),rgba(129,140,248,.85),rgba(34,211,238,.85))}
+.tn{position:relative;padding-top:42px}
+.tn::before{content:"";position:absolute;top:0;left:0;width:17px;height:17px;border-radius:50%;
+  background:#05070f;border:3px solid #818cf8;box-shadow:0 0 20px rgba(129,140,248,.85)}
+.tn.hot::before{border-color:#fb923c;box-shadow:0 0 22px rgba(251,146,60,.95)}
+.tn .yy{font:700 24px/1 'JetBrains Mono',monospace;color:#7dd3e8}
+.tn.hot .yy{color:#fb923c}
+.tn .tt{font-size:21.5px;font-weight:700;color:#f4f7ff;margin:12px 0 10px;line-height:1.25}
+.tn .dd{font-size:16.5px;line-height:1.58;color:#a6b2cc}
+
+/* horizontal flow (open steps) */
+.flow{display:flex;align-items:stretch;gap:0}
+.fs{flex:1;padding:22px 26px 4px;border-top:2px solid rgba(139,148,248,.35)}
+.fs.h2{border-top-color:rgba(251,146,60,.5)}
+.fs.h3{border-top-color:rgba(34,211,238,.5)}
+.fs .pn{font:600 14px/1 'JetBrains Mono',monospace;letter-spacing:.22em;color:#5b6787;margin-bottom:12px}
+.fs .pt{font-size:23px;font-weight:700;color:#f4f7ff;margin-bottom:9px}
+.fs .pd{font-size:17.5px;line-height:1.55;color:#a6b2cc}
+.fs .pd .mono{font-size:15.5px;color:#7dd3e8}
+.farr{flex:0 0 58px;display:flex;align-items:center;justify-content:center;font-size:30px;color:#818cf8;
+  animation:arp 1.9s ease-in-out infinite}
+@keyframes arp{0%,100%{opacity:.35;transform:translateX(0)}50%{opacity:1;transform:translateX(7px)}}
+
+/* code (kept terminal-like; only place a surface is allowed) */
+.code{background:rgba(3,5,13,.7);border:1px solid rgba(139,148,248,.18);border-radius:16px;
+  padding:26px 32px;font:400 18px/1.75 'JetBrains Mono',monospace;color:#c9d4e8;overflow:hidden}
+.code .cm{color:#5a6a8a}.code .kw{color:#c792ea}.code .fn{color:#82aaff}
+.code .st{color:#c3e88d}.code .nb{color:#f78c6c}.code .rr{color:#22d3ee}.code .cc{color:#fb923c}
+
+/* chips (small pills only) */
+.chips{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:10px;font:500 16.5px/1 'JetBrains Mono',monospace;
+  color:#c3cde4;background:rgba(139,148,248,.08);border:1px solid rgba(139,148,248,.22);
+  border-radius:999px;padding:11px 22px}
+.chip .dot{width:9px;height:9px;border-radius:50%;background:#818cf8;box-shadow:0 0 12px #818cf8}
+.chip.o .dot{background:#fb923c;box-shadow:0 0 12px #fb923c}
+.chip.c .dot{background:#22d3ee;box-shadow:0 0 12px #22d3ee}
+.chip.g .dot{background:#4ade80;box-shadow:0 0 12px #4ade80}
+
+/* dividers */
+.ghost{position:absolute;right:44px;top:50%;transform:translateY(-50%);z-index:1;user-select:none;text-align:right}
+.ghost .g1{font:700 330px/0.86 'Space Grotesk',sans-serif;color:transparent;
+  -webkit-text-stroke:2.5px rgba(129,140,248,.32);letter-spacing:-.04em}
+.ghost .g2{font:500 24px/1 'JetBrains Mono',monospace;color:#5b6787;letter-spacing:.5em;margin-top:22px}
+.divt{font-family:'Space Grotesk',sans-serif;font-size:104px;font-weight:700;line-height:1.02;
+  letter-spacing:-.022em;color:#f4f7ff;margin:0}
+.divs{font-size:27px;line-height:1.58;color:#aab6cf;max-width:58ch;margin-top:30px}
+
+/* architecture tiers (open, left rail) */
+.tiers{position:relative;flex:1;display:flex;flex-direction:column;margin-top:44px}
+.tiers::before{content:"";position:absolute;left:11px;top:24px;bottom:24px;width:2px;
+  background:linear-gradient(180deg,#fb923c,#818cf8 50%,#22d3ee);border-radius:2px;
+  box-shadow:0 0 18px rgba(129,140,248,.55);background-size:100% 300%;animation:flowd 3s linear infinite}
+@keyframes flowd{from{background-position:0 300%}to{background-position:0 -300%}}
+.tier{display:grid;grid-template-columns:340px 1fr;gap:64px;align-items:center;flex:1;padding:10px 0 10px 64px;position:relative}
+.tier::before{content:"";position:absolute;left:2px;width:20px;height:20px;border-radius:50%;
+  background:#05070f;border:3.5px solid #818cf8;box-shadow:0 0 18px rgba(129,140,248,.9)}
+.tier.t2::before{border-color:#fb923c;box-shadow:0 0 18px rgba(251,146,60,.9)}
+.tier.t3::before{border-color:#22d3ee;box-shadow:0 0 18px rgba(34,211,238,.9)}
+.tier .tt{font:700 27px/1.15 'Space Grotesk',sans-serif;color:#f4f7ff}
+.tier .tt small{display:block;font:500 14px/1 'JetBrains Mono',monospace;color:#5b6787;margin-top:10px;letter-spacing:.22em;text-transform:uppercase}
+.tier .tc{display:grid;grid-template-columns:1fr 1fr;gap:14px 44px}
+.tier .tc .tz{padding:4px 0 4px 26px;border-left:2px solid rgba(139,148,248,.28)}
+.tier .tc .tz .z1{font-size:20.5px;font-weight:700;color:#eef2fb}
+.tier .tc .tz .z2{font-size:16.5px;line-height:1.52;color:#a6b2cc;margin-top:5px}
+.tier .tc .tz .z2 .mono{font-size:14.5px;color:#7dd3e8}
+
+/* capability grid (open) */
+.capg{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:1fr 1fr;gap:0 56px;flex:1;margin-top:40px}
+.cap{border-top:1px solid rgba(139,148,248,.16);padding:26px 0 0}
+.cap .cn{font:700 21px/1 'JetBrains Mono',monospace;color:#525d7d;margin-bottom:14px}
+.cap h3{font-size:23px;font-weight:700;color:#f4f7ff;margin-bottom:11px;letter-spacing:-.01em}
+.cap p{font-size:17.5px;line-height:1.55;color:#a6b2cc}
+.cap p .mono{font-size:15px;color:#7dd3e8}
+
+/* takeaways */
+.take{display:grid;grid-template-columns:150px 560px 1fr;gap:48px;align-items:center;
+  padding:25px 0;border-top:1px solid rgba(139,148,248,.15)}
+.take:first-child{border-top:none}
+.take .tn{font:700 66px/1 'Space Grotesk',sans-serif;
+  background:linear-gradient(120deg,#818cf8,#22d3ee);-webkit-background-clip:text;background-clip:text;
+  color:transparent;-webkit-text-fill-color:transparent}
+.take .th{font-size:29px;font-weight:700;color:#f4f7ff;letter-spacing:-.01em;line-height:1.2}
+.take .tp{font-size:19px;line-height:1.55;color:#a6b2cc}
+
+/* cover */
+.coverimg{position:absolute;inset:0;overflow:hidden}
+.coverimg img{width:100%;height:100%;object-fit:cover;opacity:.45;animation:kb 18s ease-in-out infinite alternate}
+@keyframes kb{from{transform:scale(1)}to{transform:scale(1.09) translate(-1.5%,1%)}}
+.coverscrim{position:absolute;inset:0;background:linear-gradient(100deg,rgba(3,4,10,.96) 26%,rgba(3,4,10,.6) 62%,rgba(3,4,10,.28))}
+
+/* chrome / footer */
+.chrome{position:absolute;left:118px;right:118px;bottom:44px;display:flex;justify-content:space-between;
+  align-items:center;z-index:3;font:500 15px/1 'JetBrains Mono',monospace;color:#5b6787}
+.chrome .lbl{letter-spacing:.26em;text-transform:uppercase}
+.chrome .rt{display:flex;align-items:center;gap:20px}
+.chrome .nx{color:#fb923c;letter-spacing:.14em;text-transform:uppercase;animation:nb 2.2s ease-in-out infinite}
+@keyframes nb{0%,100%{opacity:.4}50%{opacity:1}}
+.chrome .num b{color:#aeb9d6}
+
+/* progress */
+#pbar{position:fixed;left:0;top:0;height:3px;width:0;z-index:50;
+  background:linear-gradient(90deg,#818cf8,#22d3ee,#fb923c);transition:width .45s cubic-bezier(.4,0,.2,1)}
+
+/* misc */
+.grow{flex:1;min-height:0}
+.footline{border-top:1px solid rgba(139,148,248,.15);padding-top:18px;margin-top:18px;
+  font-size:20.5px;line-height:1.55;color:#aab6cf}
+.footline b{color:#eef2fb}
+.banner{margin-top:30px;padding:26px 0 0;border-top:2px solid transparent;
+  border-image:linear-gradient(90deg,#818cf8,#22d3ee 55%,#fb923c) 1;
+  font-size:23.5px;line-height:1.5;color:#eef2fb;text-align:left}
+</style>
+</head>
+<body>
+<div id="pbar"></div>
+<div id="viewport">
+<div id="stage">
+
+<!-- ================= 01 · COVER ================= -->
+<section class="slide" data-label="Cover">
+  <div class="coverimg"><img src="./assets/cover_bg_16x9.jpg" alt=""></div>
+  <div class="coverscrim"></div>
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="orb o1"></div><div class="orb o2"></div></div>
+  <div class="vig"></div>
+  <div class="content" style="justify-content:center">
+    <div style="max-width:1350px">
+      <p class="kick an" style="--d:.05s"><em>R</em> TO THINK &nbsp;&nbsp;<em>C++</em> TO RUN</p>
+      <h1 class="an" style="--d:.14s;font-family:'Space Grotesk',sans-serif;font-size:158px;font-weight:700;line-height:.96;letter-spacing:-.028em;color:#fff">
+        agent<span class="gtx">graph</span>
+      </h1>
+      <p class="an" style="--d:.26s;font-size:31px;line-height:1.5;color:#d5deee;max-width:46ch;margin-top:34px">
+        An agentic-AI framework where a <b style="color:#fff">high-level language designs the intelligence</b>
+        and a <b style="color:#fff">low-level engine executes it</b> — one R package sitting on a C++20 core.
+      </p>
+      <div class="chips an" style="--d:.4s;margin-top:48px">
+        <span class="chip"><span class="dot"></span>R package API</span>
+        <span class="chip o"><span class="dot"></span>C++20 compiled engine</span>
+        <span class="chip c"><span class="dot"></span>13 LLM providers</span>
+        <span class="chip g"><span class="dot"></span>56 test suites green</span>
+        <span class="chip"><span class="dot"></span>Rcpp zero-copy bridge</span>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">agentgraph · keynote</span>
+    <span class="rt"><span class="nx">press → or scroll to begin</span><span class="num"><b>1</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 02 · WHAT IS AGENTGRAPH ================= -->
+<section class="slide" data-label="What is agentgraph">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="beam"></div><div class="beam b2"></div><div class="orb o1"></div><div class="orb o3"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">THE FRAMEWORK</p>
+      <h2 class="ht an" style="--d:.08s">What is <span class="gtx">agentgraph</span>?</h2>
+      <p class="an" style="--d:.16s;font-size:23.5px;line-height:1.55;color:#c6d1e6;max-width:76ch;margin-top:14px">
+        agentgraph is an <b style="color:#f4f7ff">open-source R package for building, running, and shipping agentic-AI workflows</b>.
+        You define the flow in pure R; a compiled C++20 engine executes it.
+      </p>
+      <hr class="kline an" style="--d:.2s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="duo" style="grid-template-columns:1.15fr 1fr">
+        <div class="c1">
+          <div class="ed an" style="--d:.24s"><div class="n">01</div><div><h3>What it is</h3><p>An agent is just a program that plans a step, calls a model for a decision, acts, and repeats. agentgraph turns that loop into a <b>stateful graph</b>: nodes are the steps, edges are the routing, and shared state carries the result from one step to the next.</p></div></div>
+          <div class="ed an" style="--d:.34s"><div class="n">02</div><div><h3>What it does</h3><p>It wires <b>LLMs, tools, memory, and humans</b> into one pipeline. One node calls a model, another invokes a tool, several run in parallel on real threads, and a router decides which branch comes next — all managed for you, all from R.</p></div></div>
+          <div class="ed an" style="--d:.44s"><div class="n">03</div><div><h3>What it is used for</h3><p><b>Multi-agent debates</b> and research swarms, <b>RAG</b> pipelines grounded in your own documents, coding and support agents, voice assistants, and evaluation harnesses — anything where several model-driven steps must cooperate toward one outcome.</p></div></div>
+        </div>
+        <div class="c2" style="display:flex;flex-direction:column">
+          <p class="an" style="--d:.3s;font:600 15px/1 'JetBrains Mono',monospace;letter-spacing:.26em;color:#5b6787;margin-bottom:14px">MADE OF THREE LAYERS</p>
+          <div class="an r" style="--d:.36s;border-top:2px solid transparent;border-image:linear-gradient(90deg,#818cf8,#22d3ee 55%,#fb923c) 1;padding-top:18px">
+            <div style="display:flex;align-items:baseline;gap:14px"><span class="mono" style="color:#818cf8;font-weight:700">R API</span><span style="font-size:15px;color:#5b6787;letter-spacing:.1em">what you write</span></div>
+            <p style="font-size:18px;line-height:1.5;color:#a6b2cc;margin-top:10px">Graph builders, node types, and <b style="color:#eef2fb">13 model providers</b> — every touchpoint is plain, familiar R.</p>
+          </div>
+          <div class="an r" style="--d:.44s;border-top:1px solid rgba(139,148,248,.16);padding-top:18px;margin-top:16px">
+            <div style="display:flex;align-items:baseline;gap:14px"><span class="mono" style="color:#fb923c;font-weight:700">Rcpp bridge</span><span style="font-size:15px;color:#5b6787;letter-spacing:.1em">the one seam</span></div>
+            <p style="font-size:18px;line-height:1.5;color:#a6b2cc;margin-top:10px">Auto-generated glue turns R objects into <b style="color:#eef2fb">zero-copy C++ views</b>. The bridge is crossed once per run, not per token.</p>
+          </div>
+          <div class="an r" style="--d:.52s;border-top:1px solid rgba(139,148,248,.16);padding-top:18px;margin-top:16px">
+            <div style="display:flex;align-items:baseline;gap:14px"><span class="mono" style="color:#22d3ee;font-weight:700">C++20 engine</span><span style="font-size:15px;color:#5b6787;letter-spacing:.1em">where it runs</span></div>
+            <p style="font-size:18px;line-height:1.5;color:#a6b2cc;margin-top:10px">Graph executor, hand-written HTTP and streaming client, vector search, and a thread pool — <b style="color:#eef2fb">no interpreter lock, no GC pause</b>.</p>
+          </div>
+          <div class="chips an" style="--d:.6s;margin-top:26px">
+            <span class="chip"><span class="dot"></span>library(agentgraph)</span>
+            <span class="chip c"><span class="dot"></span>8 node types</span>
+            <span class="chip o"><span class="dot"></span>13 providers</span>
+          </div>
+        </div>
+      </div>
+      <p class="footline an" style="--d:.66s">In short: agentgraph is to R <b>what orchestration frameworks are to Python</b> — a place to compose reasoning, calls, and tools into one system — but with a <b>compiled core underneath</b> and a single language on top.</p>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">what is agentgraph</span><span class="rt"><span class="nx">next →</span><span class="num"><b>2</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 03 · DIVIDER I ================= -->
+<section class="slide" data-label="Part I · The Language Ladder">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="beam"></div><div class="beam b2"></div><div class="orb o1"></div><div class="orb o3"></div></div>
+  <div class="vig"></div>
+  <div class="ghost an s" style="--d:.3s"><div class="g1">01</div><div class="g2">PART ONE</div></div>
+  <div class="content" style="justify-content:center">
+    <div style="max-width:1280px">
+      <p class="kick an">PROGRAMMING LANGUAGES</p>
+      <h1 class="divt an" style="--d:.1s">The Language <span class="gtx">Ladder</span></h1>
+      <p class="divs an" style="--d:.22s">Low-level code can do literally everything a computer can do. So why did humanity spend fifty years climbing away from it — and what did each step up buy, and cost?</p>
+      <div class="chips an" style="--d:.34s;margin-top:44px">
+        <span class="chip"><span class="dot"></span>What control really costs</span>
+        <span class="chip o"><span class="dot"></span>Why abstraction won</span>
+        <span class="chip c"><span class="dot"></span>The trade nobody talks about</span>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">part i</span><span class="rt"><span class="nx">next →</span><span class="num"><b>3</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 04 · LADDER ================= -->
+<section class="slide" data-label="The abstraction ladder">
+  <div class="fx"><div class="aur"></div><div class="grid"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">ABSTRACTION LEVELS</p>
+      <h2 class="ht an" style="--d:.08s">Every language trades <span class="gtx">control for expression</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="an" style="--d:.2s;position:relative;padding-left:96px">
+        <div style="position:absolute;left:14px;top:8px;bottom:8px;width:2px;border-radius:2px;background:linear-gradient(180deg,#f87171,#fb923c 30%,#818cf8 65%,#22d3ee);box-shadow:0 0 16px rgba(129,140,248,.45)"></div>
+        <span style="position:absolute;left:-28px;top:6px;font:600 13.5px/1 'JetBrains Mono',monospace;letter-spacing:.3em;color:#f87171;writing-mode:vertical-rl;transform:rotate(180deg)">CLOSE TO MACHINE</span>
+        <span style="position:absolute;left:-28px;bottom:6px;font:600 13.5px/1 'JetBrains Mono',monospace;letter-spacing:.3em;color:#67e8f9;writing-mode:vertical-rl;transform:rotate(180deg)">CLOSE TO HUMAN</span>
+        <div class="ed an" style="--d:.24s;padding-top:0;grid-template-columns:150px 290px 1fr;gap:34px"><div class="n" style="font-size:21px">1940s</div><div><h3 style="font-size:28px">Machine code<small style="display:block;font:500 14px/1.4 'JetBrains Mono',monospace;color:#5b6787;margin-top:6px">ASSEMBLY · RAW BYTES</small></h3></div><div><p style="font-size:19.5px;line-height:1.52">Instructions written exactly as the CPU reads them. Zero abstraction, zero safety, total authority over the silicon. Nobody writes it by hand anymore except boot code and hot kernels.</p></div></div>
+        <div class="ed an" style="--d:.32s;grid-template-columns:150px 290px 1fr;gap:34px"><div class="n" style="font-size:21px">1972</div><div><h3 style="font-size:28px">C<small style="display:block;font:500 14px/1.4 'JetBrains Mono',monospace;color:#5b6787;margin-top:6px">DENNIS RITCHIE · BELL LABS</small></h3></div><div><p style="font-size:19.5px;line-height:1.52">One thin layer up: human-readable syntax that compiles almost one-to-one into machine code. Memory is yours to allocate and yours to break. C still runs the world's infrastructure.</p></div></div>
+        <div class="ed an" style="--d:.4s;grid-template-columns:150px 290px 1fr;gap:34px"><div class="n" style="font-size:21px">1985</div><div><h3 style="font-size:28px">C++<small style="display:block;font:500 14px/1.4 'JetBrains Mono',monospace;color:#5b6787;margin-top:6px">BJARNE STROUSTRUP</small></h3></div><div><p style="font-size:19.5px;line-height:1.52">C with zero-cost abstractions: classes, templates, RAII. You keep the metal but can organize code like a civilization. The language of engines — browsers, games, databases, trading.</p></div></div>
+        <div class="ed an" style="--d:.48s;grid-template-columns:150px 290px 1fr;gap:34px"><div class="n" style="font-size:21px">1991</div><div><h3 style="font-size:28px">Python<small style="display:block;font:500 14px/1.4 'JetBrains Mono',monospace;color:#5b6787;margin-top:6px">GUIDO VAN ROSSUM</small></h3></div><div><p style="font-size:19.5px;line-height:1.52">Interpreted and readable. Ten lines of C become one line of Python. An interpreter now sits between you and the machine, and you pay rent for it at runtime — in speed and in memory.</p></div></div>
+        <div class="ed an" style="--d:.56s;grid-template-columns:150px 290px 1fr;gap:34px;border-bottom:1px solid rgba(139,148,248,.15)"><div class="n" style="font-size:21px">1993</div><div><h3 style="font-size:28px">R<small style="display:block;font:500 14px/1.4 'JetBrains Mono',monospace;color:#5b6787;margin-top:6px">IHAKA &amp; GENTLEMAN · AUCKLAND</small></h3></div><div><p style="font-size:19.5px;line-height:1.52">A language where data frames, formulas, and statistical models are native citizens. You speak statistics; the machine handles everything else. R sits at the very top of this ladder.</p></div></div>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">the ladder</span><span class="rt"><span class="nx">next →</span><span class="num"><b>4</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 05 · WHAT LOW-LEVEL DELIVERS ================= -->
+<section class="slide" data-label="What low-level delivers">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="orb o2"></div><div class="beam b2"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">LOW-LEVEL POWER</p>
+      <h2 class="ht an" style="--d:.08s">What C and C++ <span class="gtx">actually give you</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="duo">
+        <div class="c1">
+          <div class="ed an" style="--d:.2s"><div class="n">01</div><div><h3>Manual memory control</h3><p>You decide exactly when every byte appears and when it vanishes. Memory can be pooled, reused, and laid out to fit CPU cache lines. There is no garbage collector — <b>nothing ever pauses your program mid-computation</b> to clean up.</p></div></div>
+          <div class="ed an" style="--d:.32s"><div class="n">02</div><div><h3>True parallelism</h3><p><span class="mono">std::thread</span>, atomics, and lock-free structures put every core to work at once, with <b>no global interpreter lock</b> serializing them. Browsers, databases, and game engines are C++ because parallelism is its native mode.</p></div></div>
+          <div class="ed an" style="--d:.44s"><div class="n">03</div><div><h3>Zero-copy &amp; SIMD</h3><p>Pass a pointer and you pass the data itself — no duplication, no serialization. SIMD pushes <b>8 to 16 numbers</b> through the CPU per cycle, and C++ drives those lanes directly. Latencies land in nanoseconds.</p></div></div>
+        </div>
+        <div class="c2">
+          <div class="ed an" style="--d:.26s"><div class="n">04</div><div><h3>Operating-system access</h3><p>Sockets, file handles, memory maps, and kernel calls are first-class citizens. The network stack belongs to your program, not to a wrapper library — <b>nothing stands between you and the OS</b>.</p></div></div>
+          <div class="ed an" style="--d:.38s"><div class="n">05</div><div><h3>Deterministic latency</h3><p>The same work costs the same time on every run: no interpreter jitter, no GC pause, no just-in-time warmup. Flight controls, trading engines, and medical devices are certified in C and C++ <b>for exactly this reason</b>.</p></div></div>
+          <div class="ed an" style="--d:.5s"><div class="n">06</div><div><h3>Compile once, run native</h3><p>The compiler emits a real machine-code binary. No runtime to install, no bytecode to interpret, no dependency graph to break — <b>the binary you test is the binary you ship</b>.</p></div></div>
+        </div>
+      </div>
+      <p class="footline an" style="--d:.62s">The proof surrounds you: <b>Linux is ~30 million lines of C</b>; Chrome, V8, and the engines inside Unreal and Unity are C++; and Python itself is CPython — <b>an interpreter written in C</b>. Everyone already runs low-level code daily; most people just never see it.</p>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">low-level powers</span><span class="rt"><span class="nx">next →</span><span class="num"><b>5</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 06 · THE HIDDEN TAX ================= -->
+<section class="slide" data-label="The hidden tax">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="beam"></div><div class="orb o3"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">THE PRICE OF POWER</p>
+      <h2 class="ht an" style="--d:.08s">Control is a <span class="gtx">full-time job</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="duo">
+        <div class="c1 prose">
+          <div class="ed an" style="--d:.2s;grid-template-columns:1fr;padding-top:0">
+            <div><h3>A pointer is a loaded weapon</h3>
+            <p>Nothing in C checks a pointer: no bounds, no lifetimes, no type safety after a cast. When Microsoft and Google each audited their own C/C++ codebases, they reached the same conclusion — <b>about 70% of critical security vulnerabilities</b> trace back to memory-safety mistakes like use-after-free and buffer overruns. A wrong pointer does not raise an error; it <b>segfaults the process or silently corrupts data</b>.</p></div>
+          </div>
+          <div class="ed an" style="--d:.32s;grid-template-columns:1fr">
+            <div><h3>Every experiment pays a toll</h3>
+            <p>In C, each try–look–adjust cycle needs a full <b>compile, link, and run</b> before you see a single result. Data science lives in a loop measured in seconds; a build cycle stretches it to minutes. The iteration speed that makes analysis creative is precisely what the language takes away.</p></div>
+          </div>
+          <div class="ed an" style="--d:.44s;grid-template-columns:1fr">
+            <div><h3>And the talent pool contracts</h3>
+            <p>The people who need computation most — statisticians, biologists, analysts — will never manage <span class="mono ac">malloc</span> and <span class="mono ac">free</span> daily. Choosing C++ for a data team means choosing a <b>small, expensive, hard-to-hire pool</b> and excluding your own domain experts.</p></div>
+          </div>
+        </div>
+        <div class="c2">
+          <p class="an" style="--d:.3s;font:600 15px/1 'JetBrains Mono',monospace;letter-spacing:.26em;color:#5b6787;margin-bottom:20px">ONE TASK, TWO LANGUAGES</p>
+          <div class="code an r" style="--d:.38s;flex:1;font-size:19px">
+<span class="cm"># R: the statistician writes one line</span>
+y &lt;- sqrt(x*x + 1)
+
+<span class="cm"># C: the engineer manages the machine</span>
+<span class="kw">double</span> *y = <span class="fn">malloc</span>(n * <span class="kw">sizeof</span>(<span class="kw">double</span>));
+<span class="kw">if</span> (!y) <span class="fn">perror</span>(<span class="st">"alloc failed"</span>), <span class="kw">return</span> -1;
+<span class="kw">for</span> (<span class="kw">size_t</span> i = 0; i &lt; n; i++)
+    y[i] = <span class="fn">sqrt</span>(x[i]*x[i] + 1.0);
+<span class="fn">free</span>(y);  <span class="cm">// forget this line → memory leak</span>
+          </div>
+          <p class="an" style="--d:.5s;font-size:19px;line-height:1.55;color:#aab6cf;margin-top:22px">Both compute the same thing. <b style="color:#eef2fb">One expresses the mathematics; the other manages the machine</b> — allocation, error handling, the loop, and the cleanup you must not forget.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">the hidden tax</span><span class="rt"><span class="nx">next →</span><span class="num"><b>6</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 07 · WHY HIGH-LEVEL ================= -->
+<section class="slide" data-label="Why high-level exists">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="orb o1"></div><div class="orb o3"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">THE ANSWER</p>
+      <h2 class="ht an" style="--d:.08s">Writing software is <span class="gtx">not running software</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="duo">
+        <div class="c1">
+          <p class="an" style="--d:.2s;font:600 16px/1 'JetBrains Mono',monospace;letter-spacing:.26em;color:#818cf8;margin-bottom:8px">MACHINES NEED</p>
+          <div class="ed an" style="--d:.26s"><div class="n">»</div><div><h3>Speed</h3><p>Kernels, engines, and trading systems have <b>nanosecond budgets</b>; only code compiled to metal meets them.</p></div></div>
+          <div class="ed an" style="--d:.34s"><div class="n">»</div><div><h3>Determinism</h3><p>Identical cost on every single run, so behavior can be <b>certified, predicted, and audited</b>.</p></div></div>
+          <div class="ed an" style="--d:.42s"><div class="n">»</div><div><h3>Efficiency</h3><p>Every byte and every core accounted for. Nothing spent on convenience you did not ask for.</p></div></div>
+        </div>
+        <div class="c2">
+          <p class="an" style="--d:.24s;font:600 16px/1 'JetBrains Mono',monospace;letter-spacing:.26em;color:#22d3ee;margin-bottom:8px">PEOPLE NEED</p>
+          <div class="ed an" style="--d:.3s"><div class="n">»</div><div><h3>Velocity</h3><p>An idea tested in minutes: change a line, re-run, see the result — <b>no build step in the loop</b>.</p></div></div>
+          <div class="ed an" style="--d:.38s"><div class="n">»</div><div><h3>Safety</h3><p>Mistakes raise <b>readable errors</b> instead of corrupting memory or crashing the process.</p></div></div>
+          <div class="ed an" style="--d:.46s"><div class="n">»</div><div><h3>Access</h3><p>Domain experts — not only systems engineers — can build software <b>for their own fields</b>.</p></div></div>
+        </div>
+      </div>
+      <p class="banner an" style="--d:.58s">High-level languages exist for the <b>writer</b>. Low-level languages exist for the <b>machine</b>. The strongest systems ever built refuse to choose.</p>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">why high-level</span><span class="rt"><span class="nx">next →</span><span class="num"><b>7</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 08 · DIVIDER II ================= -->
+<section class="slide" data-label="Part II · The Birth of R">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="beam"></div><div class="orb o2"></div></div>
+  <div class="vig"></div>
+  <div class="ghost an s" style="--d:.3s"><div class="g1">02</div><div class="g2">PART TWO</div></div>
+  <div class="content" style="justify-content:center">
+    <div style="max-width:1280px">
+      <p class="kick an">HISTORY</p>
+      <h1 class="divt an" style="--d:.1s">The <span class="gtx">Birth</span> of R</h1>
+      <p class="divs an" style="--d:.22s">Two academics got frustrated with a commercial language they could not afford. What they built in New Zealand became the world's language of statistics — and its heart was never R at all.</p>
+      <div class="chips an" style="--d:.34s;margin-top:44px">
+        <span class="chip c"><span class="dot"></span>Who created it</span>
+        <span class="chip"><span class="dot"></span>Why they created it</span>
+        <span class="chip o"><span class="dot"></span>How they created it: in C</span>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">part ii</span><span class="rt"><span class="nx">next →</span><span class="num"><b>8</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 09 · R TIMELINE ================= -->
+<section class="slide" data-label="R history timeline">
+  <div class="fx"><div class="aur"></div><div class="grid"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">1976 → TODAY</p>
+      <h2 class="ht an" style="--d:.08s">A language named after <span class="gtx">Robert and Ross</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="tline">
+        <div class="tn an" style="--d:.2s"><div class="yy">1976</div><div class="tt">S is born</div><div class="dd">John Chambers at Bell Labs creates S: statistics as an interactive conversation instead of a punched-card batch job. The idea that data work should be a dialogue starts here.</div></div>
+        <div class="tn an" style="--d:.28s"><div class="yy">1988</div><div class="tt">S rewritten in C</div><div class="dd">Version 3 of S is re-implemented in C. The statistical language's own engine abandons its older plumbing for C — a hint of what R would soon repeat.</div></div>
+        <div class="tn hot an" style="--d:.36s"><div class="yy">1991</div><div class="tt">Ihaka &amp; Gentleman</div><div class="dd">Ross Ihaka and Robert Gentleman at the University of Auckland start an experimental free dialect of S. The name R: their first initials, one letter past S.</div></div>
+        <div class="tn an" style="--d:.44s"><div class="yy">1995</div><div class="tt">Released as free software</div><div class="dd">R is published under the GPL. Anyone on earth can now run, study, modify, and extend it. A global community starts forming immediately.</div></div>
+        <div class="tn an" style="--d:.52s"><div class="yy">1997</div><div class="tt">R Core Team forms</div><div class="dd">About twenty maintainers — including John Chambers himself — take stewardship. Releases have shipped continuously from that day to this.</div></div>
+        <div class="tn hot an" style="--d:.6s"><div class="yy">2000 →</div><div class="tt">R 1.0 and CRAN</div><div class="dd">R 1.0.0 arrives. CRAN grows past <b style="color:#eef2fb">21,000 packages</b>: the largest curated collection of statistical software in history.</div></div>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">r timeline</span><span class="rt"><span class="nx">next →</span><span class="num"><b>9</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 10 · R RUNS ON C ================= -->
+<section class="slide" data-label="R runs on C">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="orb o1"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">THE TWIST</p>
+      <h2 class="ht an" style="--d:.08s">R was <span class="gtx">never written in R</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="duo" style="grid-template-columns:1.05fr 1fr">
+        <div class="c1">
+          <div class="ed an" style="--d:.2s"><div class="n">»</div><div><h3>The interpreter is C</h3><p>Every expression you type in R is parsed and evaluated by a C program. The R you love is a friendly face over a compiled engine — <b>the REPL itself is C</b>.</p></div></div>
+          <div class="ed an" style="--d:.3s"><div class="n">»</div><div><h3>The mathematics is Fortran</h3><p>Linear algebra — the hottest code in statistics — is delegated to <b>BLAS and LAPACK</b>: fifty-year-old Fortran routines that hardware vendors have tuned ever since. Matrix multiply in R runs at essentially hardware speed.</p></div></div>
+          <div class="ed an" style="--d:.4s"><div class="n">»</div><div><h3>Hybrid by design</h3><p>R was born as a <b>high-level face over low-level engines</b>. Its speed never came from R code — it came from what R was standing on. That is the exact pattern this talk is about.</p></div></div>
+        </div>
+        <div class="c2" style="display:flex;flex-direction:column;justify-content:center;gap:36px">
+          <div class="flow an r" style="--d:.34s;flex-direction:column;gap:0">
+            <div class="fs" style="padding:18px 0 16px"><div class="pn">YOU WRITE</div><div class="pt">R code</div><div class="pd"><span class="mono">y &lt;- sqrt(x*x + 1)</span> — expression, not management</div></div>
+            <div class="fs" style="padding:18px 0 16px"><div class="pn">EVALUATED BY</div><div class="pt">A C interpreter</div><div class="pd">R's core engine — GNU-licensed, battle-tested for 30 years</div></div>
+            <div class="fs h2" style="padding:18px 0 16px"><div class="pn">MATH DONE IN</div><div class="pt">Fortran BLAS</div><div class="pd">vendor-tuned linear algebra at hardware speed</div></div>
+            <div class="fs h3" style="padding:18px 0 16px"><div class="pn">EXECUTED ON</div><div class="pt">The CPU</div><div class="pd">native instructions — no interpreter left by then</div></div>
+          </div>
+          <div class="chips an" style="--d:.48s">
+            <span class="chip g"><span class="dot"></span>21,000+ CRAN packages</span>
+            <span class="chip"><span class="dot"></span>2,000+ Bioconductor</span>
+            <span class="chip o"><span class="dot"></span>accepted in FDA submissions</span>
+          </div>
+        </div>
+      </div>
+      <p class="footline an" style="--d:.56s">So when someone asks <b>"can R be fast?"</b> — history already answered: <b>R has been riding on C for thirty years.</b></p>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">r runs on c</span><span class="rt"><span class="nx">next →</span><span class="num"><b>10</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 11 · DIVIDER III ================= -->
+<section class="slide" data-label="Part III · AI &amp; ML in R">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="beam b2"></div><div class="orb o3"></div></div>
+  <div class="vig"></div>
+  <div class="ghost an s" style="--d:.3s"><div class="g1">03</div><div class="g2">PART THREE</div></div>
+  <div class="content" style="justify-content:center">
+    <div style="max-width:1280px">
+      <p class="kick an">THE FRONTIER</p>
+      <h1 class="divt an" style="--d:.1s">AI &amp; Machine Learning <span class="gtx">in R</span></h1>
+      <p class="divs an" style="--d:.22s">Classical machine learning: R is a champion. Generative and agentic AI: the honest answer is more complicated — and more interesting.</p>
+      <div class="chips an" style="--d:.34s;margin-top:44px">
+        <span class="chip g"><span class="dot"></span>Where R wins outright</span>
+        <span class="chip o"><span class="dot"></span>Where Python took the lead</span>
+        <span class="chip c"><span class="dot"></span>Why the gap is smaller than it looks</span>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">part iii</span><span class="rt"><span class="nx">next →</span><span class="num"><b>11</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 12 · CLASSICAL ML ================= -->
+<section class="slide" data-label="Classical ML in R">
+  <div class="fx"><div class="aur"></div><div class="grid"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">STATISTICAL &amp; TABULAR ML</p>
+      <h2 class="ht an" style="--d:.08s">Where R is a <span class="gtx">first-class champion</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="duo">
+        <div class="c1">
+          <div class="ed an" style="--d:.2s"><div class="n">01</div><div><h3>Statistics is the native language</h3><p><span class="mono">lm, glm, survival, lme4</span> — the models statisticians actually trust are built in and first-class, with formula syntax. Not bolted on through wrappers: the language was designed around them.</p></div></div>
+          <div class="ed an" style="--d:.3s"><div class="n">02</div><div><h3>One unified ML grammar</h3><p><span class="mono">caret</span> since 2007, now <span class="mono">tidymodels</span>: a single interface for resampling, tuning, and validation across every model family. In Python, each library brings its own API; in R, there is one way to do the workflow.</p></div></div>
+          <div class="ed an" style="--d:.4s"><div class="n">03</div><div><h3>State-of-the-art tabular learners</h3><p><span class="mono">xgboost, glmnet, randomForest</span>. On tabular data, gradient boosting still beats deep networks — and R runs it natively, at speed.</p></div></div>
+        </div>
+        <div class="c2">
+          <div class="ed an" style="--d:.26s"><div class="n">04</div><div><h3>The bioinformatics empire</h3><p>Bioconductor: <b>2,000+ packages</b> for genomics, built by biologists for biologists. No ecosystem anywhere else matches its depth in computational biology.</p></div></div>
+          <div class="ed an" style="--d:.36s"><div class="n">05</div><div><h3>The grammar of graphics</h3><p><span class="mono">ggplot2</span> defined layered visualization so completely that Python cloned the idea — <b>plotnine</b> is a direct port. The concept flowed from R outward.</p></div></div>
+          <div class="ed an" style="--d:.46s"><div class="n">06</div><div><h3>Trusted where it matters most</h3><p>Pharma runs R end to end, and regulators accept R submissions. In clinical trials and reporting, <b>R is the incumbent</b>, not the challenger.</p></div></div>
+        </div>
+      </div>
+      <p class="footline an" style="--d:.58s">For anything statistical or tabular, <b>R matches or beats Python</b>. The frontier problem is not here — it is one slide away.</p>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">classical ml</span><span class="rt"><span class="nx">next →</span><span class="num"><b>12</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 13 · THE GENAI GAP ================= -->
+<section class="slide" data-label="The generative &amp; agentic gap">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="orb o2"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">GENERATIVE &amp; AGENTIC AI</p>
+      <h2 class="ht an" style="--d:.08s">Possible in R? <span class="gtx">Yes. Served by R? No.</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="duo">
+        <div class="c1">
+          <p class="an" style="--d:.2s;font:600 16px/1 'JetBrains Mono',monospace;letter-spacing:.26em;color:#4ade80;margin-bottom:8px">NOTHING TECHNICAL BLOCKS R</p>
+          <div class="ed an" style="--d:.26s"><div class="n">»</div><div><p style="font-size:20px;line-height:1.58"><b>An LLM is an HTTPS call with a JSON body.</b> R has spoken HTTP natively for decades — <span class="mono ac">curl</span>, <span class="mono ac">httr2</span>. Nothing exotic is required.</p></div></div>
+          <div class="ed an" style="--d:.34s"><div class="n">»</div><div><p style="font-size:20px;line-height:1.58"><b>Token streaming is line-buffered text.</b> Server-sent events parse the same way in any language; R can read a stream as well as Python can.</p></div></div>
+          <div class="ed an" style="--d:.42s"><div class="n">»</div><div><p style="font-size:20px;line-height:1.58"><b>Embeddings are linear algebra</b> — the very thing R was born doing, delegated to compiled BLAS under the hood.</p></div></div>
+        </div>
+        <div class="c2">
+          <p class="an" style="--d:.24s;font:600 16px/1 'JetBrains Mono',monospace;letter-spacing:.26em;color:#fb923c;margin-bottom:8px">BUT THE SHELF IS THIN</p>
+          <div class="ed an" style="--d:.3s"><div class="n">»</div><div><p style="font-size:20px;line-height:1.58"><b>Model labs ship Python SDKs on day one.</b> R wrappers arrive later — if at all — maintained by volunteers, not by the lab.</p></div></div>
+          <div class="ed an" style="--d:.38s"><div class="n">»</div><div><p style="font-size:20px;line-height:1.58">Existing options like <span class="mono ao">ellmer</span> and <span class="mono ao">tidyllm</span> wrap chat APIs well — <b>and stop there</b>. Chat is one node of an agent, not the agent.</p></div></div>
+          <div class="ed an" style="--d:.46s"><div class="n">»</div><div><p style="font-size:20px;line-height:1.58"><b>No graph runtime</b> for branching workflows, no tool-loop engine, no vector store layer, no evaluation harness. The infrastructure layer simply does not exist yet.</p></div></div>
+        </div>
+      </div>
+      <p class="banner an" style="--d:.58s">Agentic AI in R was never impossible. It was simply <b>never built</b>. So we built it.</p>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">the gap</span><span class="rt"><span class="nx">next →</span><span class="num"><b>13</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 14 · WHY PYTHON LEADS ================= -->
+<section class="slide" data-label="Why Python leads">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="beam"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">THE HONEST SCOREBOARD</p>
+      <h2 class="ht an" style="--d:.08s">Why Python leads, <span class="gtx">measured</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="stats an" style="--d:.22s">
+        <div><div class="v ci">135<span class="u">k★</span></div><div class="k"><b>transformers</b> (Hugging Face). Made pretrained models a one-liner and centralized the model hub.</div></div>
+        <div><div class="v cc">90<span class="u">k★</span></div><div class="k"><b>PyTorch</b>. The deep-learning runtime the research world standardized on for papers and reproduction.</div></div>
+        <div><div class="v co">100<span class="u">k★</span></div><div class="k"><b>LangChain &amp; friends</b>. The first agentic tooling wave — Python only, which locked in the ecosystem.</div></div>
+        <div><div class="v cg">600<span class="u">k+</span></div><div class="k"><b>PyPI packages</b> versus roughly 21k on CRAN. Thirty times the raw ecosystem mass.</div></div>
+      </div>
+      <div class="duo" style="margin-top:44px;flex:0 0 auto">
+        <div class="c1 prose">
+          <p class="an" style="--d:.36s;font-size:21px;line-height:1.6;color:#aab6cf">The real advantage is a <b>network effect, not language design</b>. Libraries attracted the people; the people built the next libraries; the flywheel spun. The physics of AI never favored Python — the community did.</p>
+        </div>
+        <div class="c2 prose">
+          <p class="an" style="--d:.44s;font-size:21px;line-height:1.6;color:#aab6cf">But ecosystems are <b>built, not granted</b>. In 2006 Python was a scripting language; NumPy made it scientific almost overnight. Frontiers move when someone builds the missing layer — which is exactly what comes next.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">python's lead</span><span class="rt"><span class="nx">next →</span><span class="num"><b>14</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 15 · DIVIDER IV ================= -->
+<section class="slide" data-label="Part IV · The Hybrid Fix">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="beam"></div><div class="beam b2"></div><div class="orb o1"></div><div class="orb o2"></div></div>
+  <div class="vig"></div>
+  <div class="ghost an s" style="--d:.3s"><div class="g1">04</div><div class="g2">PART FOUR</div></div>
+  <div class="content" style="justify-content:center">
+    <div style="max-width:1280px">
+      <p class="kick an">THE SYNTHESIS</p>
+      <h1 class="divt an" style="--d:.1s">The <span class="gtx">Hybrid</span> Fix</h1>
+      <p class="divs an" style="--d:.22s">The strongest systems in history never chose between levels. They put a high-level face on a low-level heart — and it turns out R has been doing exactly that since the day it was born.</p>
+      <div class="chips an" style="--d:.34s;margin-top:44px">
+        <span class="chip"><span class="dot"></span>The industry's open secret</span>
+        <span class="chip o"><span class="dot"></span>Rcpp: the bridge that matured</span>
+        <span class="chip c"><span class="dot"></span>What hybrid unlocks for agents</span>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">part iv</span><span class="rt"><span class="nx">next →</span><span class="num"><b>15</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 16 · THE PATTERN ================= -->
+<section class="slide" data-label="Everyone already does this">
+  <div class="fx"><div class="aur"></div><div class="grid"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">THE INDUSTRY'S OPEN SECRET</p>
+      <h2 class="ht an" style="--d:.08s">Every fast high-level stack is a <span class="gtx">skin over C</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="duo">
+        <div class="c1">
+          <div class="ed an" style="--d:.2s"><div class="n">»</div><div><h3>CPython is C</h3><p>Python's own interpreter is a C program. Every Python line ever executed was executed by C. <b>Python people have been running C daily for thirty years</b> — they just never saw it.</p></div></div>
+          <div class="ed an" style="--d:.3s"><div class="n">»</div><div><h3>The scientific stack is compiled</h3><p>NumPy, pandas, and scikit-learn cores are C and C++. <b>PyTorch is C++</b> behind a Python front end. TensorFlow: same story. The Python you benchmark is mostly compiled code already.</p></div></div>
+          <div class="ed an" style="--d:.4s"><div class="n">»</div><div><h3>R's speed core is compiled too</h3><p><span class="mono ac">data.table</span> is C, <b>Stan is C++</b>, DuckDB is C++. CRAN's fastest packages all follow one pattern: an R API over a compiled engine. The hybrid is not exotic — it is the house style of high-performance R.</p></div></div>
+        </div>
+        <div class="c2" style="display:flex;flex-direction:column;justify-content:center">
+          <div class="an" style="--d:.3s;border-top:2px solid transparent;border-image:linear-gradient(90deg,#818cf8,#22d3ee 55%,#fb923c) 1;padding-top:26px">
+            <div style="font:700 74px/1 'JetBrains Mono',monospace;color:#818cf8;letter-spacing:-.03em">2,600<span style="font-size:34px;color:#6b7694">+</span></div>
+            <p style="font-size:20px;line-height:1.58;color:#a6b2cc;margin-top:14px"><b style="color:#eef2fb">CRAN packages ship compiled C++ through Rcpp today</b> — making it the most depended-upon package in the entire R ecosystem.</p>
+          </div>
+          <div class="an" style="--d:.42s;margin-top:34px;border-top:1px solid rgba(139,148,248,.16);padding-top:26px">
+            <div style="font:700 74px/1 'JetBrains Mono',monospace;color:#22d3ee;letter-spacing:-.03em">50–100<span style="font-size:34px;color:#6b7694">×</span></div>
+            <p style="font-size:20px;line-height:1.58;color:#a6b2cc;margin-top:14px">Typical measured speedup when a hot R loop moves into Rcpp C++ — <b style="color:#eef2fb">with identical results</b>, because the glue is generated, not hand-written.</p>
+          </div>
+        </div>
+      </div>
+      <p class="footline an" style="--d:.54s">So the fix is not exotic. It is the <b>proven industrial pattern</b>, applied deliberately to a domain it has never fully claimed: <b>agentic AI</b>.</p>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">the pattern</span><span class="rt"><span class="nx">next →</span><span class="num"><b>16</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 17 · WHAT HYBRID UNLOCKS ================= -->
+<section class="slide" data-label="What hybrid unlocks for agents">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="orb o3"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">WHY AGENTS SPECIFICALLY NEED IT</p>
+      <h2 class="ht an" style="--d:.08s">Four things a pure <span class="gtx">interpreter cannot give</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="duo">
+        <div class="c1">
+          <div class="ed an" style="--d:.2s"><div class="n">01</div><div><h3>True parallel fan-out</h3><p>An agent swarm is an embarrassingly parallel workload. In a compiled engine every specialist runs on a real <span class="mono ac">std::thread</span>, with <b>no global lock serializing their thinking</b>. Twenty agents, twenty cores, one schedule.</p></div></div>
+          <div class="ed an" style="--d:.32s"><div class="n">02</div><div><h3>Streaming without interpreter hops</h3><p>Server-sent events are parsed <b>token by token inside C++</b>; callbacks cross into R only when there is something worth saying. Per-token latency stays flat even as throughput accelerates.</p></div></div>
+        </div>
+        <div class="c2">
+          <div class="ed an" style="--d:.26s"><div class="n">03</div><div><h3>Deterministic execution</h3><p>Graph routing, state merges, and tool dispatch run with <b>zero GC pauses and zero warmup</b>. An agent that ran a hundred times behaves identically on run one hundred and one — which is exactly what testing and evaluation require.</p></div></div>
+          <div class="ed an" style="--d:.38s"><div class="n">04</div><div><h3>Vector search at native speed</h3><p>The HNSW index over your documents is built and queried <b>in-process, in compiled code</b>. Retrieval answers in microseconds inside the running agent loop — not as a network hop out to another service.</p></div></div>
+        </div>
+      </div>
+      <p class="footline an" style="--d:.5s">These are exactly the four bottlenecks that slow agentic systems down. The hybrid pattern removes them <b>by construction</b>, not by tuning.</p>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">hybrid powers</span><span class="rt"><span class="nx">next →</span><span class="num"><b>17</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 18 · DIVIDER V ================= -->
+<section class="slide" data-label="Part V · agentgraph">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="beam"></div><div class="beam b2"></div><div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div></div>
+  <div class="vig"></div>
+  <div class="ghost an s" style="--d:.3s"><div class="g1">05</div><div class="g2">PART FIVE</div></div>
+  <div class="content" style="justify-content:center">
+    <div style="max-width:1280px">
+      <p class="kick an">THE PROOF</p>
+      <h1 class="divt an" style="--d:.1s;font-size:124px">agent<span class="gtx">graph</span></h1>
+      <p class="divs an" style="--d:.22s">One R package. One C++20 engine. Thirteen providers, eight node types, vector stores, streaming, evaluation, and servers — all of it tested live, not promised.</p>
+      <div class="chips an" style="--d:.34s;margin-top:44px">
+        <span class="chip"><span class="dot"></span>How it is architected</span>
+        <span class="chip o"><span class="dot"></span>How it was built</span>
+        <span class="chip c"><span class="dot"></span>What it can do</span>
+        <span class="chip g"><span class="dot"></span>Proof it works</span>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">part v</span><span class="rt"><span class="nx">next →</span><span class="num"><b>18</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 19 · ARCHITECTURE ================= -->
+<section class="slide" data-label="Architecture">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="beam b2"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">THREE TIERS · ONE MACHINE</p>
+      <h2 class="ht an" style="--d:.08s">R designs the agent, <span class="gtx">C++ runs it</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body">
+      <div class="tiers">
+        <div class="tier an" style="--d:.2s">
+          <div class="tt">R API layer<small>WHAT THE USER TOUCHES</small></div>
+          <div class="tc">
+            <div class="tz"><div class="z1">Graph builders</div><div class="z2"><span class="mono">state_graph, add_node, add_edge, route_on</span> — parallel and interrupt nodes included</div></div>
+            <div class="tz"><div class="z1">Agents &amp; tools</div><div class="z2"><span class="mono">chat_agent, react_agent, tool()</span>, plus prebuilt web, SQL, and code tools</div></div>
+            <div class="tz"><div class="z1">13 providers</div><div class="z2">OpenAI, Anthropic, Gemini, Mistral, Groq, Cohere, Azure, Bedrock, Ollama, DeepSeek, local, mock, replay</div></div>
+            <div class="tz"><div class="z1">Ecosystem</div><div class="z2">evaluation, checkpoints, cost tracking, PII guard, servers, voice</div></div>
+          </div>
+        </div>
+        <div class="tier t2 an" style="--d:.32s">
+          <div class="tt">Rcpp bridge<small>THE SEAM · CROSSED ONCE PER RUN</small></div>
+          <div class="tc">
+            <div class="tz"><div class="z1">Auto-generated glue</div><div class="z2"><span class="mono">compileAttributes</span> writes the wrappers from annotated C++ source</div></div>
+            <div class="tz"><div class="z1">25 registered routines</div><div class="z2">R functions that call straight into the DLL through <span class="mono">.Call</span></div></div>
+            <div class="tz"><div class="z1">Zero-copy objects</div><div class="z2">R vectors become C++ views, not copies; results round-trip in microseconds</div></div>
+          </div>
+        </div>
+        <div class="tier t3 an" style="--d:.44s">
+          <div class="tt">C++20 engine<small>WHERE THE WORK HAPPENS</small></div>
+          <div class="tc">
+            <div class="tz"><div class="z1">Graph executor</div><div class="z2">walks nodes, evaluates routing, merges shared state, enforces loop limits</div></div>
+            <div class="tz"><div class="z1">LLM client</div><div class="z2">hand-written HTTP, SSE streaming parser, retries, rate limiter, response cache</div></div>
+            <div class="tz"><div class="z1">Vector stores</div><div class="z2"><span class="mono">hnswlib</span> in-process, plus Chroma, Qdrant, and Pinecone clients</div></div>
+            <div class="tz"><div class="z1">Thread pool</div><div class="z2">parallel fan-out across cores for multi-agent runs</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">architecture</span><span class="rt"><span class="nx">next →</span><span class="num"><b>19</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 20 · HOW IT WAS BUILT ================= -->
+<section class="slide" data-label="How it was built">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="orb o1"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">BUILD PIPELINE</p>
+      <h2 class="ht an" style="--d:.08s">From two source trees to <span class="gtx">one package</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="duo">
+        <div class="c1">
+          <div class="ed an" style="--d:.2s"><div class="n">1</div><div><p style="font-size:20.5px;line-height:1.58"><b>Write both sides.</b> R files define the user API; C++ files define the engine. Attributes mark exactly what crosses the bridge.</p></div></div>
+          <div class="ed an" style="--d:.28s"><div class="n">2</div><div><p style="font-size:20.5px;line-height:1.58"><b>Generate the glue.</b> <span class="mono ac">compileAttributes()</span> scans the C++ and writes the R wrappers automatically — no hand-written bindings anywhere.</p></div></div>
+          <div class="ed an" style="--d:.36s"><div class="n">3</div><div><p style="font-size:20.5px;line-height:1.58"><b>Compile with GCC.</b> <span class="mono ac">g++ -std=c++20</span> builds the engine into a native DLL, with vendored headers included.</p></div></div>
+          <div class="ed an" style="--d:.44s"><div class="n">4</div><div><p style="font-size:20.5px;line-height:1.58"><b>Install as one package.</b> <span class="mono ac">R CMD INSTALL</span> ships R code and the binary together. Three hard dependencies only: Rcpp, jsonlite, processx.</p></div></div>
+          <div class="ed an" style="--d:.52s"><div class="n">5</div><div><p style="font-size:20.5px;line-height:1.58"><b>Verify relentlessly.</b> 56 test files, live provider runs, crash probes, stress tests, and a clean <span class="mono ac">R CMD check</span>.</p></div></div>
+        </div>
+        <div class="c2" style="display:flex;flex-direction:column;justify-content:center">
+          <p class="an" style="--d:.34s;font:600 15px/1 'JetBrains Mono',monospace;letter-spacing:.26em;color:#5b6787;margin-bottom:20px">THE SAME IDEA, ONE FILE EACH</p>
+          <div class="code an r" style="--d:.42s;font-size:18.5px">
+<span class="cm"># R/graph.R — the user designs</span>
+g &lt;- <span class="fn">state_graph</span>(entry = <span class="st">"lead"</span>) |&gt;
+     <span class="fn">add_node</span>(<span class="st">"lead"</span>, <span class="fn">llm_node</span>(p)) |&gt;
+     <span class="fn">add_node</span>(<span class="st">"panel"</span>, <span class="fn">parallel_node</span>(...)) |&gt;
+     <span class="fn">add_edge</span>(<span class="st">"panel"</span>, <span class="st">"synth"</span>)
+
+st &lt;- <span class="fn">run</span>(g, state, n_threads = <span class="nb">30L</span>)
+
+<span class="cm">// src/executor.cpp — the engine runs</span>
+<span class="rr">[[Rcpp::export]]</span>
+List <span class="fn">run_graph</span>(List graph, List state,
+                 List tools, <span class="kw">int</span> n_threads) {
+  ThreadPool pool(n_threads);
+  <span class="kw">return</span> Executor(pool)
+      .execute(graph, state, tools);
+}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">build story</span><span class="rt"><span class="nx">next →</span><span class="num"><b>20</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 21 · CAPABILITIES ================= -->
+<section class="slide" data-label="What you can build">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="orb o2"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">CAPABILITY WALL</p>
+      <h2 class="ht an" style="--d:.08s">What you can build <span class="gtx">today</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body">
+      <div class="capg">
+        <div class="cap an" style="--d:.2s"><div class="cn">01</div><h3>ReAct tool loops</h3><p>Agents that plan, call tools, read results, and loop until the task is done. Your own R functions become tools in one line with <span class="mono">tool()</span>.</p></div>
+        <div class="cap an" style="--d:.26s"><div class="cn">02</div><h3>Multi-agent orchestration</h3><p>Debates, supervisor–worker swarms, specialist panels. Fan-out runs on real threads and merges cleanly into shared state.</p></div>
+        <div class="cap an" style="--d:.32s"><div class="cn">03</div><h3>RAG pipelines</h3><p>Embed documents, index them in <span class="mono">hnswlib</span>, retrieve top-k, and ground every answer in your own corpus — end to end in R.</p></div>
+        <div class="cap an" style="--d:.38s"><div class="cn">04</div><h3>Live token streaming</h3><p>Server-sent events parsed in C++, surfaced as R callbacks. Tokens appear on screen the moment the model emits them.</p></div>
+        <div class="cap an" style="--d:.44s"><div class="cn">05</div><h3>Human in the loop</h3><p>Interrupt any run, inspect state, inject a decision, and resume exactly where you stopped. Checkpoints make runs durable.</p></div>
+        <div class="cap an" style="--d:.5s"><div class="cn">06</div><h3>Evaluation harness</h3><p>Datasets, metrics, and pass/fail scoring for agent outputs. Regression-test your prompts the way you test code.</p></div>
+        <div class="cap an" style="--d:.56s"><div class="cn">07</div><h3>Serve it anywhere</h3><p>REST and SSE servers, a metrics endpoint, and agent-to-agent protocol support. Deploy agents as long-running services.</p></div>
+        <div class="cap an" style="--d:.62s"><div class="cn">08</div><h3>Voice agents</h3><p>Speech-to-text in, agent reasoning in the middle, text-to-speech out. The whole loop stays inside one framework.</p></div>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">capabilities</span><span class="rt"><span class="nx">next →</span><span class="num"><b>21</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 22 · PROOF ================= -->
+<section class="slide" data-label="Proof it works">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="beam"></div><div class="beam b2"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">NOT CLAIMS · MEASUREMENTS</p>
+      <h2 class="ht an" style="--d:.08s">We tried to <span class="gtx">break it</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="stats an" style="--d:.22s">
+        <div><div class="v">56</div><div class="k"><b>test suites</b> green in the full offline run, covering every subsystem of the framework</div></div>
+        <div><div class="v cg">25<span class="u">/25</span></div><div class="k"><b>live DeepSeek checks</b> passed against a real model over the real network</div></div>
+        <div><div class="v cc">17<span class="u">/17</span></div><div class="k"><b>crash probes</b> fed malformed input in isolated processes — zero segfaults, zero hangs</div></div>
+        <div><div class="v co">30<span class="u">-way</span></div><div class="k"><b>parallel stress run</b> completed cleanly on the compiled thread pool</div></div>
+        <div><div class="v">0</div><div class="k"><b>errors, zero warnings</b> in a full <span class="mono ac">R CMD check</span> of the package</div></div>
+      </div>
+      <div class="duo" style="margin-top:48px;flex:0 0 auto">
+        <div class="c1 prose">
+          <p class="an" style="--d:.38s;font-size:21px;line-height:1.6;color:#aab6cf"><b style="color:#eef2fb">The live demo.</b> A three-specialist debate graph on a real model: a lead agent framed the question, three debaters argued <b style="color:#eef2fb">concurrently</b>, and a synthesizer merged all three positions into one verdict — all through shared state, all from R.</p>
+        </div>
+        <div class="c2 prose">
+          <p class="an" style="--d:.46s;font-size:21px;line-height:1.6;color:#aab6cf"><b style="color:#eef2fb">The adversarial pass.</b> We threw <b style="color:#eef2fb">55 malformed-constructor probes</b> and 17 process-kill scenarios at it. Result: no crash, no hang, no leak. Every bug we did find was fixed and re-verified in the same session.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">proof</span><span class="rt"><span class="nx">next →</span><span class="num"><b>22</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 23 · TAKEAWAYS ================= -->
+<section class="slide" data-label="Takeaways">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="orb o1"></div><div class="orb o3"></div></div>
+  <div class="vig"></div>
+  <div class="content">
+    <div>
+      <p class="kick an">IF YOU REMEMBER FIVE THINGS</p>
+      <h2 class="ht an" style="--d:.08s">The whole story, <span class="gtx">compressed</span></h2>
+      <hr class="kline an" style="--d:.14s">
+    </div>
+    <div class="body" style="justify-content:center">
+      <div class="take an" style="--d:.2s"><div class="tn">01</div><div class="th">Low-level can do everything, at a human cost</div><div class="tp">C and C++ hold total power over the machine — and hand you total responsibility for it, one pointer at a time.</div></div>
+      <div class="take an" style="--d:.3s"><div class="tn">02</div><div class="th">High-level languages exist for people, not processors</div><div class="tp">Velocity, safety, and access for domain experts are worth every runtime layer paid for them.</div></div>
+      <div class="take an" style="--d:.4s"><div class="tn">03</div><div class="th">R was born hybrid</div><div class="tp">Its interpreter is C and its mathematics is Fortran. R's speed was always borrowed from below — by design.</div></div>
+      <div class="take an" style="--d:.5s"><div class="tn">04</div><div class="th">Python leads by ecosystem, and ecosystems can be built</div><div class="tp">The lead is network effect, not language physics. NumPy proved frontiers move when someone builds the missing layer.</div></div>
+      <div class="take an" style="--d:.6s"><div class="tn">05</div><div class="th">agentgraph: R to express agents, C++ to execute them</div><div class="tp">One bridge crossing per run. Graph logic, streaming, and vector search at native speed — behind a pure R face.</div></div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">takeaways</span><span class="rt"><span class="nx">next →</span><span class="num"><b>23</b> / 24</span></span></footer>
+</section>
+
+<!-- ================= 24 · CLOSING ================= -->
+<section class="slide" data-label="Closing">
+  <div class="fx"><div class="aur"></div><div class="grid"></div><div class="beam"></div><div class="beam b2"></div><div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div></div>
+  <div class="vig"></div>
+  <div class="content" style="justify-content:center">
+    <div style="max-width:1500px">
+      <p class="kick an">AGENTGRAPH · R + C++20</p>
+      <h1 class="an" style="--d:.12s;font-family:'Space Grotesk',sans-serif;font-size:118px;font-weight:700;line-height:1.08;letter-spacing:-.022em;color:#f4f7ff">
+        High-level to <span class="gtx">dream</span>.<br>Low-level to <span class="gtx">deliver</span>.
+      </h1>
+      <p class="an" style="--d:.26s;font-size:26px;line-height:1.6;color:#aab6cf;max-width:64ch;margin-top:36px">
+        Two languages, one framework. The abstraction ladder does not have to be a choice — <b style="color:#eef2fb">it can be an architecture</b>.
+      </p>
+      <div class="chips an" style="--d:.38s;margin-top:48px">
+        <span class="chip"><span class="dot"></span>library(agentgraph)</span>
+        <span class="chip c"><span class="dot"></span>56 test suites</span>
+        <span class="chip o"><span class="dot"></span>13 providers</span>
+        <span class="chip g"><span class="dot"></span>tested live on DeepSeek</span>
+      </div>
+      <div class="an" style="--d:.5s;margin-top:70px;font-family:'Space Grotesk',sans-serif;font-size:100px;font-weight:700;letter-spacing:-.02em">
+        <span class="gtx">Thank you</span>
+      </div>
+    </div>
+  </div>
+  <footer class="chrome"><span class="lbl">fin</span><span class="rt"><span class="nx">press Home to restart</span><span class="num"><b>24</b> / 24</span></span></footer>
+</section>
+
+</div><!-- /stage -->
+</div><!-- /viewport -->
+
+<script>
+(function(){
+  'use strict';
+  var stage=document.getElementById('stage');
+  var slides=Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var pbar=document.getElementById('pbar');
+  var cur=0;
+
+  /* ---- fit the 1920x1080 canvas into any viewport: nothing can overflow ---- */
+  function fit(){
+    var s=Math.min(window.innerWidth/1920,window.innerHeight/1080);
+    stage.style.transform='scale('+s+')';
+  }
+  window.addEventListener('resize',fit);fit();
+
+  /* ---- slide numbers auto-filled ---- */
+  slides.forEach(function(s,i){
+    var n=s.querySelector('.num b');if(n)n.textContent=(i+1);
+  });
+
+  function show(n){
+    n=Math.max(0,Math.min(slides.length-1,n));
+    if(n===cur&&slides[cur].classList.contains('active'))return;
+    slides.forEach(function(s){s.classList.remove('active')});
+    cur=n;
+    var s=slides[cur];
+    void s.offsetWidth;           /* reflow: restart entrance animations */
+    s.classList.add('active');
+    pbar.style.width=((cur+1)/slides.length*100)+'%';
+    try{history.replaceState(null,'','#/'+(cur+1))}catch(e){}
+  }
+
+  /* ---- deep link ---- */
+  var m=location.hash.match(/#\/(\d+)/);
+  var start=m?parseInt(m[1],10)-1:0;
+  slides[start===-1?0:Math.max(0,Math.min(slides.length-1,start))].classList.add('active');
+  cur=Math.max(0,Math.min(slides.length-1,start));
+  pbar.style.width=((cur+1)/slides.length*100)+'%';
+
+  /* ---- keyboard ---- */
+  document.addEventListener('keydown',function(e){
+    var k=e.key;
+    if(k==='ArrowRight'||k==='ArrowDown'||k===' '||k==='PageDown'){e.preventDefault();show(cur+1)}
+    else if(k==='ArrowLeft'||k==='ArrowUp'||k==='PageUp'){e.preventDefault();show(cur-1)}
+    else if(k==='Home'){e.preventDefault();show(0)}
+    else if(k==='End'){e.preventDefault();show(slides.length-1)}
+    else if(k==='f'||k==='F'){
+      if(document.fullscreenElement){document.exitFullscreen&&document.exitFullscreen()}
+      else{document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen()}
+    }
+  });
+
+  /* ---- wheel: one step = one slide ---- */
+  var lastWheel=0;
+  document.addEventListener('wheel',function(e){
+    if(Math.abs(e.deltaY)<16)return;
+    var now=Date.now();
+    if(now-lastWheel<650){e.preventDefault();return}
+    lastWheel=now;e.preventDefault();
+    show(e.deltaY>0?cur+1:cur-1);
+  },{passive:false});
+
+  /* ---- touch swipe ---- */
+  var tx=null,ty=null;
+  document.addEventListener('touchstart',function(e){tx=e.touches[0].clientX;ty=e.touches[0].clientY},{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(tx===null)return;
+    var dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
+    if(Math.max(Math.abs(dx),Math.abs(dy))>60){
+      if(Math.abs(dx)>Math.abs(dy))show(dx<0?cur+1:cur-1);
+      else show(dy<0?cur+1:cur-1);
+    }
+    tx=ty=null;
+  },{passive:true});
+})();
+</script>
+</body>
+</html>

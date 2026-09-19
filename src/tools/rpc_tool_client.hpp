@@ -18,9 +18,15 @@ namespace agentgraph {
 // Protocol: one persistent TCP connection to 127.0.0.1:<port>, newline-framed
 // JSON, strictly one response line per request line. All calls are serialized
 // by a mutex so concurrent worker threads share the connection safely.
+//
+// Authentication: the parent R process generates a random per-run token and
+// passes it to both this client and the tool server. Every request carries the
+// token; the server rejects requests without it, so no other local process can
+// invoke tool handlers on the port while a run is active.
 class RpcToolClient {
 public:
-    RpcToolClient(const std::string& host, std::uint16_t port);
+    RpcToolClient(const std::string& host, std::uint16_t port,
+                  std::string auth_token = "");
     ~RpcToolClient();
 
     RpcToolClient(const RpcToolClient&) = delete;
@@ -39,6 +45,7 @@ private:
 
     std::string host_;
     std::uint16_t port_;
+    std::string auth_token_;
     std::uint64_t sock_;
     bool wsa_ok_ = false;
     std::mutex mutex_;

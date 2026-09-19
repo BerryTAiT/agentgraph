@@ -11,7 +11,14 @@ run(
   state_data = list(),
   n_threads = 0L,
   on_token = NULL,
-  resume_from = ""
+  resume_from = "",
+  on_event = NULL,
+  checkpoint_path = NULL,
+  log_path = NULL,
+  max_total_tokens = 0L,
+  max_time_sec = 0,
+  max_cost_usd = 0,
+  tenant = NULL
 )
 }
 \arguments{
@@ -28,6 +35,32 @@ run(
 \item{on_token}{Optional callback invoked for each streamed token}
 
 \item{resume_from}{Internal: node ID to resume execution from (used by resume())}
+
+\item{on_event}{Optional callback invoked for engine lifecycle events
+(node_start, node_end, llm_start, llm_end, tool_call, tool_result,
+iteration, parallel_start, parallel_end, interrupt, complete). Signature:
+\code{function(event, data)} where \code{data} is a named list.}
+
+\item{checkpoint_path}{Optional file path. When set, the graph state is
+persisted (atomically) to this file after every node and on interrupt, so
+a crashed run can be resumed with checkpoint_resume().}
+
+\item{log_path}{Optional file path. When set, every engine event
+(node/LLM/tool lifecycle) is appended as one JSON line, giving a durable
+trace of token usage, latency, and tool calls.}
+
+\item{max_total_tokens}{Kill switch: abort the run once cumulative token
+usage across all LLM calls exceeds this (0 = unlimited).}
+
+\item{max_time_sec}{Kill switch: abort the run once wall-clock seconds
+elapsed exceed this (0 = unlimited).}
+
+\item{max_cost_usd}{Kill switch: abort the run once the estimated cost
+exceeds this USD amount (0 = unlimited; requires per-provider pricing
+set via \code{\link[=provider_pricing]{provider_pricing()}}).}
+
+\item{tenant}{Optional \code{\link[=tenant]{tenant()}} to enforce rate limits / usage caps and
+record an audit line for this run.}
 }
 \value{
 The final state after graph execution

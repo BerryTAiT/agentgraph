@@ -1,9 +1,16 @@
 CXX_STD = CXX20
-PKG_CXXFLAGS = -I../inst/include -I../inst/include/concurrentqueue
+PKG_CXXFLAGS = -I../inst/include
 
 SOURCES = RcppExports.cpp rcpp_exports.cpp type_converters.cpp \
-          llm/http_client.cpp llm/sse_parser.cpp llm/llm_client.cpp \
+          llm/http_client.cpp llm/sse_parser.cpp llm/llm_client.cpp llm/llm_cache.cpp llm/sigv4.cpp \
           graph/node_runner.cpp graph/executor.cpp \
-          tools/builtin/builtin_tools.cpp tools/rpc_tool_client.cpp
+          tools/builtin/builtin_tools.cpp tools/rpc_tool_client.cpp \
+          vector/embedding_client.cpp vector/hnsw_store.cpp \
+          vector/rest_stores.cpp vector/vector_store_factory.cpp \
+          vector_rcpp.cpp
 
 OBJECTS = $(SOURCES:.cpp=.o)
+
+# libcurl is the HTTP backend on Linux/macOS (R itself requires libcurl, so
+# it is always present); pthread backs the engine's thread pools.
+PKG_LIBS = -lcurl -lpthread

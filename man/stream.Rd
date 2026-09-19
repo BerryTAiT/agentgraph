@@ -11,7 +11,12 @@ stream(
   on_token = NULL,
   on_event = NULL,
   state_data = list(),
-  n_threads = 0L
+  n_threads = 0L,
+  checkpoint_path = NULL,
+  log_path = NULL,
+  max_total_tokens = 0L,
+  max_time_sec = 0,
+  max_cost_usd = 0
 )
 }
 \arguments{
@@ -23,11 +28,21 @@ stream(
 
 \item{on_token}{Callback function for each streamed token}
 
-\item{on_event}{Callback function for graph events (reserved)}
+\item{on_event}{Callback function for engine lifecycle events}
 
 \item{state_data}{Named list of additional state data}
 
 \item{n_threads}{Thread pool size for parallel nodes (0 = auto)}
+
+\item{checkpoint_path}{Optional file path to persist state to while running}
+
+\item{log_path}{Optional file path to append a JSONL trace to while running}
+
+\item{max_total_tokens}{Kill switch on cumulative token usage (0 = unlimited)}
+
+\item{max_time_sec}{Kill switch on wall-clock seconds (0 = unlimited)}
+
+\item{max_cost_usd}{Kill switch on estimated USD cost (0 = unlimited)}
 }
 \value{
 The final state

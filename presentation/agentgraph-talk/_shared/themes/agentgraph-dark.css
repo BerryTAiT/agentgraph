@@ -1,0 +1,47 @@
+/* theme: agentgraph-dark — deep-space indigo/orange, full-bleed cinematic */
+:root{
+  --bg:#05070f;--bg-soft:#0a0f1e;--surface:rgba(255,255,255,.035);--surface-2:rgba(255,255,255,.07);
+  --border:rgba(129,140,248,.18);--border-strong:rgba(129,140,248,.38);
+  --text-1:#f1f5f9;--text-2:#aab4c8;--text-3:#6b7691;
+  --accent:#818cf8;--accent-2:#fb923c;--accent-3:#22d3ee;
+  --good:#34d399;--warn:#fbbf24;--bad:#f87171;
+  --grad:linear-gradient(100deg,#818cf8,#22d3ee 45%,#fb923c);
+  --grad-soft:linear-gradient(100deg,rgba(129,140,248,.16),rgba(34,211,238,.1) 50%,rgba(251,146,60,.14));
+  --radius:14px;--radius-sm:8px;--radius-lg:22px;
+  --shadow:0 10px 40px rgba(0,0,0,.45);
+  --shadow-lg:0 24px 80px rgba(0,0,0,.6);
+  --font-sans:'Space Grotesk','Inter','Noto Sans SC',sans-serif;
+  --font-display:'Space Grotesk','Inter',sans-serif;
+  --font-mono:'JetBrains Mono',monospace;
+}
+/* ambient canvas that lives behind every slide */
+.slide{background:#05070f}
+.fx-field{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.fx-field .aurora{position:absolute;inset:-30%;background:
+  radial-gradient(42% 38% at 18% 22%,rgba(99,102,241,.20),transparent 70%),
+  radial-gradient(36% 34% at 82% 26%,rgba(34,211,238,.13),transparent 70%),
+  radial-gradient(44% 42% at 72% 82%,rgba(249,115,22,.13),transparent 72%),
+  radial-gradient(30% 30% at 12% 84%,rgba(139,92,246,.12),transparent 70%);
+  animation:aurora-drift 26s ease-in-out infinite alternate;filter:blur(10px)}
+.fx-field .grid{position:absolute;inset:0;background-image:
+  linear-gradient(rgba(129,140,248,.05) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(129,140,248,.05) 1px,transparent 1px);
+  background-size:88px 88px;mask-image:radial-gradient(75% 75% at 50% 42%,#000 30%,transparent 100%)}
+.fx-field .dots{position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.10) 1.2px,transparent 1.2px);background-size:220px 220px;opacity:.35;animation:dot-drift 40s linear infinite}
+.fx-field .glowline{position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(129,140,248,.5),rgba(34,211,238,.5),rgba(251,146,60,.5),transparent);animation:glowline-slide 9s ease-in-out infinite}
+.fx-field .glowline.g1{top:16%}.fx-field .glowline.g2{top:50%;animation-delay:-3s}.fx-field .glowline.g3{top:84%;animation-delay:-6s}
+.fx-field .orb{position:absolute;border-radius:50%;filter:blur(60px);opacity:.5;animation:orb-float 18s ease-in-out infinite alternate}
+.fx-field .orb.o1{width:420px;height:420px;left:-120px;top:-90px;background:radial-gradient(circle,rgba(99,102,241,.34),transparent 70%)}
+.fx-field .orb.o2{width:360px;height:360px;right:-90px;bottom:-70px;background:radial-gradient(circle,rgba(249,115,22,.24),transparent 70%);animation-delay:-7s}
+.fx-field .orb.o3{width:280px;height:280px;right:22%;top:-100px;background:radial-gradient(circle,rgba(34,211,238,.20),transparent 70%);animation-delay:-11s}
+@keyframes aurora-drift{0%{transform:translate(0,0) scale(1)}50%{transform:translate(3%,-2%) scale(1.06)}100%{transform:translate(-3%,2%) scale(1.02)}}
+@keyframes dot-drift{to{background-position:220px 440px}}
+@keyframes glowline-slide{0%,100%{opacity:.12;transform:translateX(-2%)}50%{opacity:.5;transform:translateX(2%)}}
+@keyframes orb-float{from{transform:translate(0,0)}to{transform:translate(40px,-34px)}}
+/* vignette so edges stay deep */
+.vignette{position:absolute;inset:0;pointer-events:none;z-index:1;background:radial-gradient(120% 120% at 50% 45%,transparent 55%,rgba(2,4,10,.75) 100%)}
+/* content sits above fx */
+.slide .layer{position:relative;z-index:2;height:100%}
+/* progress + hint chrome inherit theme */
+.progress-bar{background:rgba(255,255,255,.08)!important}
+.progress-bar span{background:var(--grad)!important}

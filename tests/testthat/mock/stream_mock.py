@@ -7,13 +7,58 @@ exercised offline.
 
 Usage: python stream_mock.py <port_start> <port_end> <tokens_json> <ready_file> <request_log>
 
-tokens_json: a JSON array of strings; each string is emitted as one delta chunk,
-followed by a final chunk carrying finish_reason "stop", then data: [DONE].
+tokens_json, either:
+  - a JSON array of strings: each string is emitted as one content delta chunk,
+    followed by a final chunk with finish_reason "stop", then data: [DONE]; or
+  - a JSON object:
+      {"tokens": ["Hel", "lo"],
+       "tool_calls": [{"id": "call_1", "name": "calculator",
+                       "arg_fragments": ['{"expr', 'ession":', '"2+3"}']}],
+       "final_finish": "tool_calls"}
+    which additionally emits tool-call deltas with the arguments split across
+    fragments (as real providers do), exercising argument accumulation.
 """
 import json
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+class SingleBindServer(ThreadingHTTPServer):
+    # Disable SO_REUSEADDR so two concurrent mocks cannot bind the same port
+    # on Windows (see mock_llm_server.py for details).
+    allow_reuse_address = False
+
+
+def build_chunks(spec):
+    chunks = []
+    tokens = spec if isinstance(spec, list) else spec.get("tokens", [])
+    if isinstance(tokens, str):
+        tokens = [tokens]
+    for t in tokens:
+        chunks.append({"choices": [{"delta": {"content": t}, "finish_reason": None}]})
+
+    if isinstance(spec, dict):
+        for tc in spec.get("tool_calls", []):
+            first = {
+                "index": 0,
+                "id": tc.get("id", "call_1"),
+                "type": "function",
+                "function": {"name": tc.get("name", ""), "arguments": ""},
+            }
+            chunks.append({"choices": [{"delta": {"tool_calls": [first]},
+                                        "finish_reason": None}]})
+            for frag in tc.get("arg_fragments", []):
+                part = {"index": 0,
+                        "function": {"arguments": frag}}
+                chunks.append({"choices": [{"delta": {"tool_calls": [part]},
+                                            "finish_reason": None}]})
+
+    final_finish = "stop"
+    if isinstance(spec, dict):
+        final_finish = spec.get("final_finish", "stop")
+    chunks.append({"choices": [{"delta": {}, "finish_reason": final_finish}]})
+    return chunks
 
 
 def main():
@@ -24,7 +69,8 @@ def main():
     request_log = sys.argv[5]
 
     with open(tokens_file, "r", encoding="utf-8") as f:
-        tokens = json.load(f)
+        spec = json.load(f)
+    chunks = build_chunks(spec)
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.0"  # no keep-alive; connection closes after response
@@ -46,14 +92,11 @@ def main():
             self.send_header("Connection", "close")
             self.end_headers()
 
-            for t in tokens:
-                chunk = {"choices": [{"delta": {"content": t}, "finish_reason": None}]}
+            for chunk in chunks:
                 self.wfile.write(("data: " + json.dumps(chunk) + "\n\n").encode("utf-8"))
                 self.wfile.flush()
                 time.sleep(0.02)
 
-            final = {"choices": [{"delta": {}, "finish_reason": "stop"}]}
-            self.wfile.write(("data: " + json.dumps(final) + "\n\n").encode("utf-8"))
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
             self.close_connection = True
@@ -61,7 +104,7 @@ def main():
     server = None
     for p in range(port_start, port_end + 1):
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", p), Handler)
+            server = SingleBindServer(("127.0.0.1", p), Handler)
             break
         except OSError:
             server = None

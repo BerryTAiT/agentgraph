@@ -30,8 +30,10 @@ using socket_handle_t = int;
 constexpr socket_handle_t kInvalidHandle = -1;
 #endif
 
-RpcToolClient::RpcToolClient(const std::string& host, std::uint16_t port)
-    : host_(host), port_(port), sock_(kInvalidSock) {
+RpcToolClient::RpcToolClient(const std::string& host, std::uint16_t port,
+                             std::string auth_token)
+    : host_(host), port_(port), auth_token_(std::move(auth_token)),
+      sock_(kInvalidSock) {
 #ifdef _WIN32
     WSADATA data;
     wsa_ok_ = (WSAStartup(MAKEWORD(2, 2), &data) == 0);
@@ -149,6 +151,9 @@ Result<json> RpcToolClient::call(const std::string& tool_name,
     json req;
     req["name"] = tool_name;
     req["args_json"] = arguments.dump();
+    if (!auth_token_.empty()) {
+        req["token"] = auth_token_;
+    }
     std::string line = req.dump();
     line.push_back('\n');
 

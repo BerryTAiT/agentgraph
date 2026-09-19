@@ -7,9 +7,13 @@
 provider_anthropic(
   api_key = Sys.getenv("ANTHROPIC_API_KEY"),
   model = "claude-sonnet-4-20250514",
-  base_url = "https://api.anthropic.com",
+  base_url = "https://api.anthropic.com/v1",
   max_tokens = 4096,
-  temperature = 0.7
+  temperature = 0.7,
+  max_retries = 3L,
+  retry_base_delay_ms = 500L,
+  retry_max_delay_ms = 8000L,
+  requests_per_minute = 0L
 )
 }
 \arguments{
@@ -22,10 +26,19 @@ provider_anthropic(
 \item{max_tokens}{Maximum tokens in response}
 
 \item{temperature}{Sampling temperature}
+
+\item{max_retries}{Retry transient HTTP failures (429/5xx); 0 disables}
+
+\item{retry_base_delay_ms}{Initial backoff delay (ms), doubles each attempt}
+
+\item{retry_max_delay_ms}{Upper bound on the backoff delay (ms)}
+
+\item{requests_per_minute}{Token-bucket request cap; 0 disables rate limiting}
 }
 \value{
 A provider configuration list
 }
 \description{
-Create an Anthropic provider configuration
+Uses Anthropic's OpenAI-compatible endpoint, so the native C++ client
+speaks the chat-completions format directly.
 }

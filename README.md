@@ -127,6 +127,12 @@ is_interrupted(state)          # FALSE — done
 | `read_file` | Read a file's contents |
 | `write_file` | Write content to a file |
 
+> **Security:** the native `read_file`/`write_file` tools run in-process and
+> accept any path the model produces. Sandbox them with
+> `file_tools_policy(allow = "...")` (or the `AGENTGRAPH_FS_ALLOW` /
+> `AGENTGRAPH_FS_DENY` env vars) before exposing them to untrusted input, and
+> see [SECURITY.md](SECURITY.md) for the full threat model.
+
 ## Custom tools
 
 ```r

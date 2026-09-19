@@ -7,6 +7,12 @@
 #' @return A tool definition list
 #' @export
 tool <- function(name, description, parameters = list(), handler) {
+  if (!is.character(name) || length(name) != 1L || is.na(name) || !nzchar(name)) {
+    stop("tool(): `name` must be a single non-empty character string.")
+  }
+  if (!is.function(handler)) {
+    stop("tool(): `handler` must be an R function.")
+  }
   properties <- list()
   required <- character(0)
   for (pname in names(parameters)) {

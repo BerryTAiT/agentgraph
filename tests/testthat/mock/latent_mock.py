@@ -16,6 +16,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 log_lock = threading.Lock()
 
 
+class SingleBindServer(ThreadingHTTPServer):
+    # Disable SO_REUSEADDR so two concurrent mocks cannot bind the same port
+    # on Windows (see mock_llm_server.py for details).
+    allow_reuse_address = False
+
+
 def main():
     port_start = int(sys.argv[1])
     port_end = int(sys.argv[2])
@@ -73,7 +79,7 @@ def main():
     server = None
     for p in range(port_start, port_end + 1):
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", p), Handler)
+            server = SingleBindServer(("127.0.0.1", p), Handler)
             break
         except OSError:
             server = None

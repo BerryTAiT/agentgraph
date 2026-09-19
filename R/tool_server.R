@@ -27,6 +27,15 @@
          "(reinstall agentgraph).")
   }
 
+  # Per-run auth token: the server rejects any request without it, so no other
+  # process can drive tool execution on the port while this run is alive.
+  # Generated in the parent and passed only via argv (visible only to the
+  # child) and the returned handle (never written to disk or logs).
+  token <- paste(
+    sample(c(letters, LETTERS, 0:9), 32, replace = TRUE),
+    collapse = ""
+  )
+
   rscript <- file.path(
     R.home("bin"),
     if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript"
@@ -35,7 +44,7 @@
   p <- processx::process$new(
     rscript,
     c(script, handlers_file, port_file,
-      as.character(port_range[1]), as.character(port_range[2])),
+      as.character(port_range[1]), as.character(port_range[2]), token),
     stdout = stdout_file,
     stderr = stderr_file,
     cleanup = TRUE
@@ -63,6 +72,7 @@
 
   list(process = p,
        port = port,
+       token = token,
        files = c(handlers_file, port_file, stdout_file, stderr_file))
 }
 

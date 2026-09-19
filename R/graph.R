@@ -5,6 +5,13 @@
 #' @return A graph object
 #' @export
 state_graph <- function(entry, max_iterations = 25L) {
+  if (!is.character(entry) || length(entry) != 1L || is.na(entry) || !nzchar(entry)) {
+    stop("state_graph(): `entry` must be a single non-empty character string (a node ID).")
+  }
+  if (!is.numeric(max_iterations) || length(max_iterations) != 1L || is.na(max_iterations) ||
+      max_iterations < 1) {
+    stop("state_graph(): `max_iterations` must be a number >= 1.")
+  }
   obj <- list(
     entry_point = entry,
     nodes = list(),
@@ -23,6 +30,12 @@ state_graph <- function(entry, max_iterations = 25L) {
 #' @return The modified graph object
 #' @export
 add_node <- function(graph, id, node) {
+  if (!is.character(id) || length(id) != 1L || is.na(id) || !nzchar(id)) {
+    stop("add_node(): `id` must be a single non-empty character string.")
+  }
+  if (!is.list(node) || is.null(node$type)) {
+    stop("add_node(): `node` must be a node configuration from llm_node(), tool_node(), router_node(), subgraph_node(), interrupt_node(), or parallel_node().")
+  }
   graph$nodes[[id]] <- node
   graph
 }
@@ -70,5 +83,8 @@ add_conditional_edge <- function(graph, from, route) {
 #' @return A routing configuration
 #' @export
 route_on <- function(field, rules = list(), default = "__end__") {
+  if (!is.character(field) || length(field) != 1L || is.na(field) || !nzchar(field)) {
+    stop("route_on(): `field` must be a single non-empty character string (a state field).")
+  }
   list(field = field, rules = rules, default = default)
 }
